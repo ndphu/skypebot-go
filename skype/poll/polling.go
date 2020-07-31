@@ -213,5 +213,5 @@ func processNewMessage(evt EventMessage, endpoint string) {
 	//	chat.ReactMessage(parts[7], msgId, "poop", endpoint)
 	//
 	//}
-	go ProcessMessage(evt)
+	ProcessMessage(evt)
 }

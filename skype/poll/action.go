@@ -4,6 +4,7 @@ import (
 	"github.com/ndphu/skypebot-go/skype/chat"
 	"log"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -34,8 +35,16 @@ func TakeAction(evt EventMessage, action Action) {
 	if action.Type == ActionTypeReact {
 		threadId, _ := parseInfo(evt)
 		for _, emotion := range action.Data["emotions"].([]interface{}) {
+			if match, err := regexp.MatchString("^<ss type=\"(.*)\">.*<\\/ss>$", evt.Resource.Content); err != nil{
+				//panic(err)
+			} else {
+				if match {
+					log.Println("Ignore single icon message")
+					continue
+				}
+			}
 			log.Println("Reacting with emotion", emotion)
-			chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
+			go chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
 		}
 	}
 }
