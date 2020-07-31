@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/ndphu/skypebot-go/config"
+	"github.com/ndphu/skypebot-go/skype/chat"
 	"github.com/ndphu/skypebot-go/skype/model"
 	"github.com/ndphu/skypebot-go/utils"
 	"log"
@@ -56,26 +57,41 @@ type SubscriptionRequest struct {
 }
 
 func StartPolling() error {
-	_, err := CreateEndpoint()
-	if err != nil {
-		log.Println("Fail to create endpoint")
-		return err
-	}
-	log.Println("Polling using endpoint:", config.Get().CurrentEndpoint())
+	return startPolling()
+}
 
-	subscriptionId, err := CreateSubscriptionForNewMessage()
-	if err != nil {
-		log.Println("Fail to create subscription")
-		return err
-	}
+func startPolling() error {
+	sigChan := make(chan error, 0)
 
-	go subscribe(subscriptionId)
-	go active()
+	go func() {
+		for {
+			_, err := CreateEndpoint()
+			if err != nil {
+				log.Println("Fail to create endpoint")
+				return
+			}
+			log.Println("Polling using endpoint:", config.Get().CurrentEndpoint())
+
+			subscriptionId, err := CreateSubscriptionForNewMessage()
+			if err != nil {
+				log.Println("Fail to create subscription")
+				return
+			}
+
+			go subscribe(subscriptionId, sigChan)
+			go active(sigChan)
+			go sendHeartbeatMessages(sigChan)
+			rerror := <-sigChan
+			log.Println("Some thing failing", rerror)
+			log.Println("Sleep and retry polling")
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	return nil
 }
 
-func subscribe(subscriptionId int) {
+func subscribe(subscriptionId int, signChan chan error) {
 	ackId := 0
 	for {
 		endpoint := config.Get().CurrentEndpoint()
@@ -83,13 +99,15 @@ func subscribe(subscriptionId int) {
 			"/subscriptions/"+strconv.Itoa(subscriptionId)+"/poll?ackId="+strconv.Itoa(ackId), nil)
 		utils.SetRequestHeaders(req)
 		utils.SetEndpointHeader(req)
-		status, _, body, err := utils.ExecuteHttpRequestExtended(req)
+		status, headers, body, err := utils.ExecuteHttpRequestExtended(req)
 		if err != nil {
 			log.Println("Maybe long polling timeout. Retry...")
 			continue
 		}
 		if status != 200 {
-			log.Println("Fail to continue polling. Server return status", status)
+			log.Println("Fail to continue polling. Server return status", status, string(body))
+			utils.LogHeaders(headers)
+			signChan <- ErrorFailPolling
 			return
 		}
 		pr := PollingResponse{}
@@ -100,25 +118,42 @@ func subscribe(subscriptionId int) {
 			log.Println(em.Id, em.ResourceType, em.Type)
 			ackId = em.Id
 			if em.ResourceType == "NewMessage" {
-				processNewMessage(em, endpoint)
+				processNewMessage(em)
 			}
 		}
 	}
 }
 
-func active() {
+var ErrorFailActiveHeartBeat = errors.New("fail active heart beat")
+var ErrorFailPolling = errors.New("fail polling thread")
+
+func active(signChan chan error) {
 	for {
 		req, _ := http.NewRequest("POST", config.Get().MessageBaseUrl()+"/v1/users/ME/endpoints/"+config.Get().CurrentEndpoint()+"/active", strings.NewReader("{\"timeout\":120}"))
 		utils.SetRequestHeaders(req)
 		utils.SetEndpointHeader(req)
-		_, _, _, err := utils.ExecuteHttpRequestExtended(req)
+		status, _, body, err := utils.ExecuteHttpRequestExtended(req)
 		if err != nil {
-			log.Println("Fail to post active")
-		} else {
-			log.Println("Post active successfully")
+			log.Println("Fail to post active", status, string(body))
+			signChan <- ErrorFailActiveHeartBeat
+			return
 		}
-		time.Sleep(30 * time.Second)
+
+		time.Sleep(15 * time.Second)
 	}
+}
+
+func sendHeartbeatMessages(signChan chan error) {
+	for {
+		log.Println("Post active successfully")
+		if err := chat.PostTextMessage("19:8052c0b5464f40aab38d73d641cbed11@thread.skype", time.Now().String()); err != nil {
+			signChan <- ErrorFailActiveHeartBeat
+			return
+		}
+		log.Println("Post heartbeat successfully")
+		time.Sleep(1 * time.Minute)
+	}
+
 }
 
 func GetEndpoints() ([]config.Endpoint, error) {
@@ -202,16 +237,6 @@ func CreateSubscriptionForNewMessage() (int, error) {
 	return strconv.Atoi(path.Base(headers.Get("Location")))
 }
 
-func processNewMessage(evt EventMessage, endpoint string) {
-	//
-	//if
-	//evt.Resource.From == "https://azwus1-client-s.gateway.messenger.live.com/v1/users/ME/contacts/8:dai.tran89" ||
-	//	evt.Resource.From == "https://azwus1-client-s.gateway.messenger.live.com/v1/users/ME/contacts/8:letuankhang" ||
-	//	evt.Resource.From == "https://azwus1-client-s.gateway.messenger.live.com/v1/users/ME/contacts/8:ngdacphu" {
-	//	parts := strings.Split(evt.ResourceLink, "/")
-	//	msgId, _ := strconv.Atoi(parts[9])
-	//	chat.ReactMessage(parts[7], msgId, "poop", endpoint)
-	//
-	//}
+func processNewMessage(evt EventMessage) {
 	ProcessMessage(evt)
 }

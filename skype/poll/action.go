@@ -20,7 +20,7 @@ func ProcessMessage(evt EventMessage) error {
 		return nil
 	}
 	for _, action := range actions {
-		TakeAction(evt, action)
+		go TakeAction(evt, action)
 	}
 	return nil
 }
@@ -44,7 +44,8 @@ func TakeAction(evt EventMessage, action Action) {
 				}
 			}
 			log.Println("Reacting with emotion", emotion)
-			go chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
+			//go chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
+			chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
 		}
 	}
 }
