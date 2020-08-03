@@ -16,6 +16,7 @@ type TokenRequest struct {
 }
 
 func main() {
+	//config.Login()
 	startServer()
 }
 
