@@ -15,6 +15,11 @@ type TokenRequest struct {
 	Token string `json:"token"`
 }
 
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 func main() {
 	startServer()
 }
@@ -34,6 +39,22 @@ func startServer() {
 				return
 			}
 			c.JSON(200, gin.H{"success": true})
+		})
+		manage.POST("/login", func(c *gin.Context) {
+			var loginRequest LoginRequest
+			if err := c.ShouldBindJSON(&loginRequest); err != nil {
+				c.AbortWithStatusJSON(400, gin.H{"message": "invalid login request"})
+				return
+			}
+			if token, err := config.Login(loginRequest.Username, loginRequest.Password); err != nil {
+				c.AbortWithStatusJSON(500, gin.H{
+					"message": "Fail to login. Please check again.",
+					"error":   err})
+				return
+			} else {
+				config.Get().ReloadWithSkypeToken(token)
+				c.JSON(200, gin.H{"token": token})
+			}
 		})
 	}
 	conversations := r.Group("/api/skype/conversations")
@@ -85,6 +106,7 @@ func startServer() {
 			}
 			c.JSON(200, gin.H{"success": true})
 		})
+
 		messages.POST("/reactThread", func(c *gin.Context) {
 			req := model.ReactMessageRequest{}
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -121,9 +143,9 @@ func startServer() {
 		})
 	}
 
-	if config.Get().MessageBaseUrl() != "" {
-		poll.StartPolling()
-	}
+	//if config.Get().MessageBaseUrl() != "" {
+	//	poll.StartPolling()
+	//}
 
 	r.Run()
 }
