@@ -11,7 +11,14 @@ type Rule struct {
 	Threads []string `json:"threads"`
 	Users   []string `json:"users"`
 	Actions []Action `json:"actions"`
+	Exclude Exclude `json:"exclude"`
 }
+
+type Exclude struct {
+	Users []string `json:"users"`
+	Threads []string `json:"threads"`
+}
+
 
 type ActionType string
 
@@ -73,7 +80,8 @@ func initSampleRules() {
 func IsRuleMatched(threadId, userId string) ([]Action) {
 	actions := make([]Action, 0)
 	for _, rule := range rules {
-		if (contains(rule.Users, "ALL") || contains(rule.Users, userId)) &&
+		if ((contains(rule.Users, "ALL") || contains(rule.Users, userId)) &&
+			!contains(rule.Exclude.Users, userId)) &&
 			(contains(rule.Threads, "ALL") || contains(rule.Threads, threadId)) {
 			log.Println("Rule matched.")
 			actions = append(actions, rule.Actions...)

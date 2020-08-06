@@ -79,7 +79,7 @@ func startPolling() error {
 			}
 
 			go subscribe(subscriptionId, sigChan)
-			go active(sigChan)
+			//go active(sigChan)
 			go sendHeartbeatMessages(sigChan)
 			rerror := <-sigChan
 			log.Println("Some thing failing", rerror)
@@ -146,12 +146,12 @@ func active(signChan chan error) {
 func sendHeartbeatMessages(signChan chan error) {
 	for {
 		log.Println("Post active successfully")
-		if err := chat.PostTextMessage("19:8052c0b5464f40aab38d73d641cbed11@thread.skype", time.Now().String()); err != nil {
+		if err := chat.PostTextMessage("19:496e0c170fd2456aba5434ab1a51528f@thread.skype", time.Now().String()); err != nil {
 			signChan <- ErrorFailActiveHeartBeat
 			return
 		}
 		log.Println("Post heartbeat successfully")
-		time.Sleep(1 * time.Minute)
+		time.Sleep(5 * time.Second)
 	}
 
 }

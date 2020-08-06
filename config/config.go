@@ -71,9 +71,6 @@ func init() {
 			registrationToken: "",
 		}
 	}
-
-	data, _ := json.Marshal(config)
-	println(string(data))
 }
 
 func getCorrectMessageBaseUrl(skypeToken string) (string, string, error) {
@@ -104,7 +101,7 @@ func getCorrectMessageBaseUrl(skypeToken string) (string, string, error) {
 	endpoint := parsedUrl.Scheme + "://" + parsedUrl.Host
 	registrationToken := resp.Header.Get("Set-RegistrationToken")
 
-	log.Println("Endpoint", endpoint, "RegistrationToken", registrationToken)
+	log.Println("Endpoint", endpoint)
 
 	return endpoint, registrationToken, nil
 }
