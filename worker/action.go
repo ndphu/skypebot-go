@@ -1,9 +1,8 @@
-package poll
+package worker
 
 import (
 	"github.com/ndphu/skypebot-go/skype/chat"
 	"log"
-	"path"
 	"regexp"
 	"strings"
 )
@@ -25,12 +24,6 @@ func ProcessMessage(evt EventMessage) error {
 	return nil
 }
 
-func parseInfo(evt EventMessage) (string, string) {
-	threadId := path.Base(evt.Resource.ConversationLink)
-	from := path.Base(evt.Resource.From)
-	return threadId, from
-}
-
 func TakeAction(evt EventMessage, action Action) {
 	if action.Type == ActionTypeReact {
 		threadId, _ := parseInfo(evt)
@@ -44,7 +37,6 @@ func TakeAction(evt EventMessage, action Action) {
 				}
 			}
 			log.Println("Reacting with emotion", emotion)
-			//go chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
 			chat.ReactMessage(threadId, evt.Resource.Id, emotion.(string))
 		}
 	}

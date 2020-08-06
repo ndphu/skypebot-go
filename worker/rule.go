@@ -1,4 +1,4 @@
-package poll
+package worker
 
 import (
 	"encoding/json"

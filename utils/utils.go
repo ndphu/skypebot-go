@@ -54,7 +54,6 @@ func GetUTCNow() string {
 //}
 func ExecuteHttpRequestExtended(req *http.Request) (status int, headers http.Header, body []byte, err error) {
 	log.Println("Making", req.Method, "request to", req.URL.String())
-	//LogHeaders(req.Header)
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -67,7 +66,6 @@ func ExecuteHttpRequestExtended(req *http.Request) (status int, headers http.Hea
 		log.Println("Fail to read body", err)
 		return resp.StatusCode, resp.Header, nil, err
 	}
-	log.Println(string(respBody))
 	return resp.StatusCode, resp.Header, respBody, nil
 }
 
