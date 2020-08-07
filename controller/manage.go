@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ndphu/skypebot-go/config"
+	"github.com/ndphu/skypebot-go/worker"
 )
 
 type TokenRequest struct {
@@ -18,12 +18,17 @@ func Manage(r *gin.RouterGroup) {
 	manage := r.Group("/manage")
 	{
 		manage.POST("/token", func(c *gin.Context) {
+			w := worker.FindWorker(c.GetHeader("workerId"))
+			if w == nil {
+				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
+				return
+			}
 			var token TokenRequest
 			if err := c.ShouldBindJSON(&token); err != nil {
 				c.AbortWithStatusJSON(400, gin.H{"message": "invalid token request"})
 				return
 			}
-			if err := config.Get().ReloadWithSkypeToken(token.Token); err != nil {
+			if err := w.Reload(token.Token); err != nil {
 				c.AbortWithStatusJSON(500, gin.H{"error": err})
 				return
 			}
@@ -35,14 +40,26 @@ func Manage(r *gin.RouterGroup) {
 				c.AbortWithStatusJSON(400, gin.H{"message": "invalid login request"})
 				return
 			}
-			if token, err := config.Login(loginRequest.Username, loginRequest.Password); err != nil {
+			if token, err := worker.Login(loginRequest.Username, loginRequest.Password); err != nil {
 				c.AbortWithStatusJSON(500, gin.H{
 					"message": "Fail to login. Please check again.",
 					"error":   err})
-				return
 			} else {
-				config.Get().ReloadWithSkypeToken(token)
-				c.JSON(200, gin.H{"token": token})
+				if newWorker, err := worker.NewWorker(token, nil); err != nil {
+					c.AbortWithStatusJSON(500, gin.H{
+						"message": "Fail to create worker.",
+						"error":   err})
+				} else {
+					worker.AddWorker(newWorker)
+					c.JSON(200, gin.H{"success": true, "worker": newWorker.Data()})
+				}
+			}
+		})
+		manage.POST("/saveWorkers", func(c *gin.Context) {
+			if err := worker.SaveWorkers(); err != nil {
+				c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(200, gin.H{"success": true})
 			}
 		})
 	}

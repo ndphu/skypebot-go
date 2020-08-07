@@ -1,18 +1,16 @@
-package chat
+package worker
 
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/ndphu/skypebot-go/config"
-	"github.com/ndphu/skypebot-go/skype/model"
-	"github.com/ndphu/skypebot-go/utils"
+	"github.com/ndphu/skypebot-go/model"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 )
 
-func CreateObject(target, filename, transactionId string) (string, error) {
+func (w *Worker) CreateObject(target, filename, transactionId string) (string, error) {
 	permissions := make(map[string][]string)
 	permissions[target] = []string{"read"}
 	body := model.CreateObjectRequest{
@@ -26,8 +24,8 @@ func CreateObject(target, filename, transactionId string) (string, error) {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", config.Get().MediaBaseUrl()+"/v1/objects", bytes.NewReader(bodyPayload))
-	utils.PrepareMediaRequestHeaders(req, transactionId)
+	req, err := http.NewRequest("POST", w.mediaBaseUrl+"/v1/objects", bytes.NewReader(bodyPayload))
+	w.setMediaRequestHeaders(req, transactionId)
 	req.Header.Set("Content-Type", "application/json")
 
 	client := http.Client{}
@@ -54,10 +52,10 @@ func CreateObject(target, filename, transactionId string) (string, error) {
 	return cor.Id, nil
 }
 
-func UploadObject(objectId, transactionId string, payload []byte) error {
+func (w *Worker) UploadObject(objectId, transactionId string, payload []byte) error {
 	log.Println("Uploading object", objectId, "with data size", strconv.Itoa(len(payload)))
-	req, err := http.NewRequest("PUT", config.Get().MediaBaseUrl()+"/v1/objects/"+objectId+"/content/imgpsh", bytes.NewReader(payload))
-	utils.PrepareMediaRequestHeaders(req, transactionId)
+	req, err := http.NewRequest("PUT", w.mediaBaseUrl+"/v1/objects/"+objectId+"/content/imgpsh", bytes.NewReader(payload))
+	w.setMediaRequestHeaders(req, transactionId)
 	req.Header.Set("Content-Type", "application")
 
 	client := http.Client{}

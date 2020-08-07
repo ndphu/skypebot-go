@@ -38,3 +38,7 @@ go.mod
 token
 
 *.exe
+
+resources
+
+workers.json

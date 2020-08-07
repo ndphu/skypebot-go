@@ -1,10 +1,9 @@
-package chat
+package worker
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/ndphu/skypebot-go/config"
 	"github.com/ndphu/skypebot-go/utils"
 	"log"
 	"net/http"
@@ -15,7 +14,7 @@ type emotionRequest struct {
 	Emotions string `json:"emotions"`
 }
 
-func ReactMessage(conversationId string, messageId string, emotion string) error {
+func (w *Worker) ReactMessage(conversationId string, messageId string, emotion string) error {
 	log.Println("Reacting message", messageId, "in thread", conversationId, "with emotion", emotion, "...")
 	urlPath := fmt.Sprintf("/v1/users/ME/conversations/%s/messages/%s/properties?name=emotions", conversationId, messageId)
 	emotions, _ := json.Marshal(map[string]string{"key": emotion})
@@ -24,17 +23,17 @@ func ReactMessage(conversationId string, messageId string, emotion string) error
 	}
 	payload, _ := json.Marshal(er)
 
-	req, _ := http.NewRequest("PUT", config.Get().MessageBaseUrl()+urlPath, bytes.NewReader(payload))
-	utils.SetRequestHeaders(req)
-	_, _, _, err := utils.ExecuteHttpRequestExtended(req)
+	req, _ := http.NewRequest("PUT", w.mediaBaseUrl+urlPath, bytes.NewReader(payload))
+	w.setRequestHeaders(req)
+	_, _, _, err := w.executeHttpRequest(req)
 	if err != nil {
 		return err
 	}
 	log.Println("React successfully")
 	return nil
 }
-func ReactThread(target, emotion string) error {
-	messages, err := GetAllTextMessagesWithLimitAndTimeout(target, 1000)
+func (w*Worker)ReactThread(target, emotion string) error {
+	messages, err := w.GetAllTextMessagesWithLimitAndTimeout(target, 1000)
 	log.Println(len(messages))
 	for _, m := range messages {
 		log.Println(m.Content)
@@ -50,7 +49,7 @@ func ReactThread(target, emotion string) error {
 		}
 		for {
 			log.Println("Reacting message:", msg.Content)
-			if err := ReactMessage(target, msg.Id, emotion); err != nil {
+			if err := w.ReactMessage(target, msg.Id, emotion); err != nil {
 				if err == utils.ErrorLimitRequestExceeded {
 					log.Println("Got 429 error. Sleeping for 30 second and retry...")
 					time.Sleep(30 * time.Second)

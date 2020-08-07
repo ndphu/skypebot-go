@@ -18,7 +18,7 @@ func startServer() {
 	controller.Manage(skypeEndpoint)
 	controller.Conversations(skypeEndpoint)
 	controller.Messages(skypeEndpoint)
-	controller.Polling(skypeEndpoint)
+	controller.WorkerController(skypeEndpoint)
 
 	r.Run()
 }

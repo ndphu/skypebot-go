@@ -1,21 +1,20 @@
-package chat
+package worker
 
 import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
-	"github.com/ndphu/skypebot-go/config"
-	"github.com/ndphu/skypebot-go/skype/model"
+	"github.com/ndphu/skypebot-go/model"
 	"github.com/ndphu/skypebot-go/utils"
 	"log"
 	"net/http"
 	"time"
 )
 
-func PostImageToThread(target, objectId, fileName string, fileSize int) error {
+func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize int) error {
 	pmr := model.PostMessageRequest{
 		MessageId:     "1" + utils.RandStringRunes(19),
-		DisplayName:   "/dev/null",
+		DisplayName:   "Joker",
 		MessageType:   "RichText/UriObject",
 		ContentType:   "text",
 		ComposeTime:   utils.GetUTCNow(),
@@ -27,19 +26,22 @@ func PostImageToThread(target, objectId, fileName string, fileSize int) error {
 		log.Println("Fail to unmarshal PostMessageRequest", err)
 		return err
 	}
-	req, _ := http.NewRequest("POST", config.Get().MessageBaseUrl()+"/v1/users/ME/conversations/"+target+"/messages", bytes.NewReader(payload))
-	req.Header.Set("Authorization", "skype_token "+config.Get().SkypeToken())
-	req.Header.Set("X-Client-Version", "1418/8.62.0.83//")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36")
-	req.Header.Set("Referer", "https://web.skype.com/")
-	req.Header.Set("Origin", "https://web.skype.com")
-
-	utils.ExecuteHttpRequestExtended(req)
+	log.Println("payload", string(payload))
+	req, _ := http.NewRequest("POST", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages", bytes.NewReader(payload))
+	w.setRequestHeaders(req)
+	status, headers, body, err := w.executeHttpRequest(req)
+	if status != 201 {
+		log.Println("Fail to post message", status)
+		logHeaders(headers)
+		log.Println(string(body))
+		log.Println(err)
+		return ErrorFailToPostMediaMessage
+	}
 	log.Println("Post message successfully")
 	return nil
 }
 
-func PostTextMessage(target, text string) (error) {
+func (w *Worker) PostTextMessage(target, text string) (error) {
 	pmr := model.PostMessageRequest{
 		MessageId:   "1" + utils.RandStringRunes(19),
 		DisplayName: "/dev/null",
@@ -53,19 +55,19 @@ func PostTextMessage(target, text string) (error) {
 		log.Println("Fail to unmarshal PostMessageRequest", err)
 		return err
 	}
-	req, _ := http.NewRequest("POST", config.Get().MessageBaseUrl()+"/v1/users/ME/conversations/"+target+"/messages", bytes.NewReader(payload))
-	utils.SetRequestHeaders(req)
-	utils.ExecuteHttpRequestExtended(req)
+	req, _ := http.NewRequest("POST", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages", bytes.NewReader(payload))
+	w.setRequestHeaders(req)
+	w.executeHttpRequest(req)
 	log.Println("Post message successfully")
 	return nil
 }
 
-func GetMessages(target string) ([]model.ExistingMessage, error) {
-	threadMessages := make([]model.ExistingMessage, 0)
+func (w *Worker) GetMessages(target string) ([]model.SkypeMessage, error) {
+	threadMessages := make([]model.SkypeMessage, 0)
 
-	req, _ := http.NewRequest("GET", config.Get().MessageBaseUrl()+"/v1/users/ME/conversations/"+target+"/messages?startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
-	utils.SetRequestHeaders(req)
-	_, _, resp, err := utils.ExecuteHttpRequestExtended(req)
+	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages?startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
+	w.setRequestHeaders(req)
+	_, _, resp, err := w.executeHttpRequest(req)
 	if err != nil {
 		log.Println("Fail to query message in thread", target)
 		return nil, err
@@ -83,12 +85,11 @@ func GetMessages(target string) ([]model.ExistingMessage, error) {
 	return threadMessages, nil
 }
 
-func GetAllTextMessagesWithLimitAndTimeout(target string, limit int) ([]model.ExistingMessage, error) {
-	threadMessages := make([]model.ExistingMessage, 0)
-
-	req, _ := http.NewRequest("GET", config.Get().MessageBaseUrl()+"/v1/users/ME/conversations/"+target+"/messages?pageSize=200&startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
-	utils.SetRequestHeaders(req)
-	_, _, resp, err := utils.ExecuteHttpRequestExtended(req)
+func (w *Worker) GetAllTextMessagesWithLimitAndTimeout(target string, limit int) ([]model.SkypeMessage, error) {
+	threadMessages := make([]model.SkypeMessage, 0)
+	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages?pageSize=200&startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
+	w.setRequestHeaders(req)
+	_, _, resp, err := w.executeHttpRequest(req)
 	if err != nil {
 		log.Println("Fail to query message in thread", target)
 		return nil, err
@@ -114,8 +115,8 @@ func GetAllTextMessagesWithLimitAndTimeout(target string, limit int) ([]model.Ex
 		loop = loop + 1
 		log.Println("looping", loop, syncState)
 		_req2, _ := http.NewRequest("GET", syncState, nil)
-		utils.SetRequestHeaders(_req2)
-		_, _, resp2, err := utils.ExecuteHttpRequestExtended(_req2)
+		w.setRequestHeaders(_req2)
+		_, _, resp2, err := w.executeHttpRequest(_req2)
 		if err != nil {
 			if err == utils.ErrorLimitRequestExceeded {
 				time.Sleep(15 * time.Second)

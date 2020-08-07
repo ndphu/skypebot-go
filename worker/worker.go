@@ -2,10 +2,14 @@ package worker
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
-	"github.com/ndphu/skypebot-go/config"
-	"github.com/ndphu/skypebot-go/utils"
+	"fmt"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/google/uuid"
+	"github.com/ndphu/skypebot-go/media"
+	"github.com/ndphu/skypebot-go/model"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,68 +17,106 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var ErrorFailToCreateEndpoint = errors.New("fail to create endpoint")
 var ErrorSkypeTokenExpired = errors.New("skype token is expired")
+var ErrorEmptySkypeToken = errors.New("empty skype token")
 var ErrorFailToCreateSubscription = errors.New("fail to create subscription")
 var ErrorFailPolling = errors.New("fail polling")
+var ErrorFailToPostMediaMessage = errors.New("fail to post media message")
 
 const defaultMediaBaseUrl = "https://api.asm.skype.com"
 
-type PollingWorker struct {
+type Status string
+
+const StatusStopped Status = "stopped"
+const StatusStopping Status = "stopping"
+const StatusRunning Status = "running"
+const StatusStarting Status = "starting"
+
+type WorkerData struct {
+	BaseUrl      string `json:"baseUrl"`
+	MediaBaseUrl string `json:"mediaBaseUrl"`
+	Id           string `json:"id"`
+	Status       Status `json:"status"`
+	SkypeId      string `json:"skypeId"`
+}
+
+type Worker struct {
 	stopRequest       chan bool
-	sigChan           chan error
 	endpoint          string
 	skypeToken        string
 	registrationToken string
-	baseUrl           string
-	mediaBaseUrl      string
 	subscriptionId    int
 	eventCallback     EventCallback
+	baseUrl           string
+	mediaBaseUrl      string
+	id                string
+	status            Status
+	skypeId           string
 }
 
-type EventCallback func(event *EventMessage)
+type EventCallback func(worker *Worker, event *model.MessageEvent)
 
-func NewWorker(skypeToken string, eventCallback EventCallback) (*PollingWorker, error) {
-	worker := &PollingWorker{
+func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) {
+	w := &Worker{
 		skypeToken:        skypeToken,
 		endpoint:          "",
 		registrationToken: "",
 		baseUrl:           "",
 		mediaBaseUrl:      defaultMediaBaseUrl,
 		stopRequest:       make(chan bool),
-		sigChan:           make(chan error),
-		eventCallback:     eventCallback,
+		id:                uuid.New().String(),
+		status:            StatusStopped,
+		eventCallback: func(worker *Worker, event *model.MessageEvent) {
+			worker.ProcessMessage(event)
+		},
+	}
+	if eventCallback != nil {
+		w.eventCallback = eventCallback
 	}
 	// set message base URL and registration token
-	if err := worker.getCorrectMessageBaseUrl(); err != nil {
+	if err := w.init(); err != nil {
 		return nil, err
 	}
 	// create endpoint
 
-	return worker, nil
+	return w, nil
 }
 
-func (w *PollingWorker) Start() (error) {
+func (w *Worker) Data() WorkerData {
+	return WorkerData{
+		Id:           w.id,
+		Status:       w.status,
+		BaseUrl:      w.baseUrl,
+		MediaBaseUrl: w.mediaBaseUrl,
+		SkypeId:      w.skypeId,
+	}
+}
+
+func (w *Worker) Start() (error) {
+	w.status = StatusStarting
 	if err := w.createEndpoint(); err != nil {
 		return err
 	}
 	return w.start()
 }
 
-func (w *PollingWorker) Stop() {
+func (w *Worker) Stop() error {
+	w.status = StatusStopping
 	log.Println("Stopping worker...")
 	w.stopRequest <- true
 	<-w.stopRequest
-	log.Println("Working stopped successfully")
+	return nil
 }
 
-func (w *PollingWorker) createEndpoint() error {
+func (w *Worker) createEndpoint() error {
 	req, _ := http.NewRequest("POST", w.baseUrl+"/v1/users/ME/endpoints", strings.NewReader(
 		`{"endpointFeatures":"Agent,Presence2015,MessageProperties,CustomUserProperties,Highlights,Casts,CortanaBot,ModernBots,AutoIdleForWebApi,secureThreads,notificationStream,InviteFree,SupportsReadReceipts"}`))
 	w.setRequestHeaders(req)
-	status, headers, body, err := utils.ExecuteHttpRequestExtended(req)
+	status, headers, body, err := w.executeHttpRequest(req)
 	if err != nil {
 		log.Println("Fail to create endpoint")
 		return err
@@ -106,14 +148,14 @@ func (w *PollingWorker) createEndpoint() error {
 	return ErrorFailToCreateEndpoint
 }
 
-func (w *PollingWorker) getEndpoints() ([]config.Endpoint, error) {
+func (w *Worker) getEndpoints() ([]model.Endpoint, error) {
 	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/endpoints", nil)
-	utils.SetRequestHeaders(req)
-	status, _, body, err := utils.ExecuteHttpRequestExtended(req)
+	w.setRequestHeaders(req)
+	status, _, body, err := w.executeHttpRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	endpoints := make([]config.Endpoint, 0)
+	endpoints := make([]model.Endpoint, 0)
 	if err := json.Unmarshal(body, &endpoints); err != nil {
 		log.Println("Status:", status, "Fail to unmarshal", string(body))
 		return nil, err
@@ -121,7 +163,13 @@ func (w *PollingWorker) getEndpoints() ([]config.Endpoint, error) {
 	return endpoints, nil
 }
 
-func (w *PollingWorker) getCorrectMessageBaseUrl() (error) {
+func (w *Worker) init() (error) {
+	jwt.Parse(w.skypeToken, func(token *jwt.Token) (interface{}, error) {
+		claims := token.Claims.(jwt.MapClaims)
+		w.skypeId, _ = claims["skypeid"].(string)
+		return nil, nil
+	})
+
 	req, _ := http.NewRequest("GET", "https://client-s.gateway.messenger.live.com/v1/users/ME/properties", nil)
 	w.setDefaultHeaders(req)
 	req.Header.Set("Authentication", "skypetoken="+w.skypeToken)
@@ -153,8 +201,8 @@ func (w *PollingWorker) getCorrectMessageBaseUrl() (error) {
 	return nil
 }
 
-func (w *PollingWorker) subscribe() error {
-	subReq := SubscriptionRequest{
+func (w *Worker) subscribe() error {
+	subReq := model.SubscriptionRequest{
 		ChannelType:      "HttpLongPoll",
 		ConversationType: 2047,
 		InterestedResources: []string{
@@ -166,13 +214,13 @@ func (w *PollingWorker) subscribe() error {
 	req, _ := http.NewRequest("POST", w.baseUrl+"/v1/users/ME/endpoints/"+w.endpoint+"/subscriptions", bytes.NewReader(payload))
 	w.setRequestHeaders(req)
 	w.setEndpointHeader(req)
-	status, headers, body, err := utils.ExecuteHttpRequestExtended(req)
+	status, headers, body, err := w.executeHttpRequest(req)
 	if err != nil {
 		return err
 	}
 	if status != 201 {
 		log.Println("Fail to create subscription", status, string(body))
-		utils.LogHeaders(headers)
+		logHeaders(headers)
 		return ErrorFailToCreateSubscription
 	}
 	w.subscriptionId, _ = strconv.Atoi(path.Base(headers.Get("Location")))
@@ -180,7 +228,7 @@ func (w *PollingWorker) subscribe() error {
 	return nil
 }
 
-func (w *PollingWorker) start() error {
+func (w *Worker) start() error {
 	err := w.createEndpoint()
 	if err != nil {
 		log.Println("Fail to create endpoint", err)
@@ -189,8 +237,27 @@ func (w *PollingWorker) start() error {
 	return w.subscribe()
 }
 
-func (w *PollingWorker) startPolling() {
+type HttpResult struct {
+	resp *http.Response
+	err  error
+}
+
+func (w *Worker) startPolling() {
+	w.status = StatusRunning
 	ackId := 0
+	cx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-w.stopRequest
+		cancel()
+	}()
+
+	defer func() {
+		log.Println("Worker stopped successfully")
+		w.status = StatusStopped
+		w.stopRequest <- true
+	}()
+	client := http.Client{}
+	resultChan := make(chan HttpResult)
 	for {
 		pollUrl := w.baseUrl + "/v1/users/ME/endpoints/" + w.endpoint + "/subscriptions/" + strconv.Itoa(w.subscriptionId) + "/poll"
 		if ackId > 0 {
@@ -199,37 +266,102 @@ func (w *PollingWorker) startPolling() {
 		req, _ := http.NewRequest("POST", pollUrl, nil)
 		w.setRequestHeaders(req)
 		w.setEndpointHeader(req)
-		status, headers, body, err := utils.ExecuteHttpRequestExtended(req)
-		if err != nil {
-			log.Println("Maybe long polling timeout. Retry...")
-			continue
-		}
-		if status != 200 {
-			log.Println("Fail to continue polling. Server return status", status, string(body))
-			utils.LogHeaders(headers)
-			w.sigChan <- ErrorFailPolling
-			break
-		}
-		pr := PollingResponse{}
-		if err := json.Unmarshal(body, &pr); err != nil {
-			continue
-		}
-		for _, em := range pr.EventMessages {
-			log.Println(em.Id, em.ResourceType, em.Type)
-			ackId = em.Id
-			if w.eventCallback != nil {
-				w.eventCallback(&em)
+		req.WithContext(cx)
+
+		go func() {
+			resp, err := client.Do(req)
+			select {
+			case <-cx.Done():
+			default:
+				resultChan <- HttpResult{resp, err}
 			}
+		}()
+
+		select {
+		case result := <-resultChan:
+			status, headers, body, err := parseHttpResponse(result.resp, result.err)
+			if err != nil {
+				log.Println("Fail to make polling request", err)
+				return
+			}
+			if status != 200 {
+				log.Println("Fail to continue polling. Server return status", status, string(body))
+				logHeaders(headers)
+				return
+			}
+			fmt.Println(string(body))
+			pr := model.PollingResponse{}
+			if err := json.Unmarshal(body, &pr); err != nil {
+				continue
+			}
+			for _, em := range pr.Events {
+				log.Println(em.Id, em.ResourceType, em.Type)
+				ackId = em.Id
+				if w.eventCallback != nil {
+					w.eventCallback(w, &em)
+				}
+			}
+		case <-cx.Done():
+			log.Println("Stop http request received")
+			return
 		}
 	}
 }
 
-func parseInfo(evt EventMessage) (string, string) {
-	threadId := path.Base(evt.Resource.ConversationLink)
-	from := path.Base(evt.Resource.From)
-	return threadId, from
-}
-
-func (w *PollingWorker) setEndpointHeader(req *http.Request) {
+func (w *Worker) setEndpointHeader(req *http.Request) {
 	req.Header.Set("EndpointId", w.endpoint)
+}
+func (w *Worker) Reload(skypeToken string) error {
+	if skypeToken != "" {
+		w.Stop()
+		w.skypeToken = skypeToken
+		return w.init()
+	}
+	return ErrorEmptySkypeToken
+}
+func (w *Worker) sendRandomImage(category string, event *model.MessageEvent) error {
+	if category == "" {
+		category = media.GetCategories()[0]
+	}
+	log.Println("Send random image for category", category)
+	var mediaUrl string
+	var mediaPayload []byte
+	for {
+		mediaUrl = media.RandomMediaUrl(category, 1)[0]
+		payload, err := media.DownloadMediaUrl(mediaUrl)
+		if err != nil {
+			continue
+		}
+		if len(payload) == 503 {
+			continue
+		}
+		mediaPayload = payload
+		break
+	}
+
+	filename := path.Base(mediaUrl)
+	transId := uuid.New().String()
+	threadId, _ := parseInfo(event)
+	objectId, err := w.CreateObject(threadId, filename, transId)
+
+	if err != nil {
+		log.Println("Fail to create object", transId, err)
+		return err
+	}
+	if err := w.UploadObject(objectId, transId, mediaPayload); err != nil {
+		log.Println("Fail to upload object", objectId, transId)
+		return err
+	}
+	try := 0
+	var postError error
+	for ; try < 3; {
+		if postError = w.PostImageToThread(threadId, objectId, filename, len(mediaPayload)); postError != nil {
+			time.Sleep(2 * time.Second)
+		} else {
+			break
+		}
+		try ++
+	}
+	return nil
+
 }
