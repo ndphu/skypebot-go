@@ -26,8 +26,9 @@ func init() {
 	}
 
 	for _, f := range files {
-		log.Println("processing file", f)
-		medias[strings.Split(f, "\\")[1]] = loadFile(f)
+		_, filename := filepath.Split(f)
+		log.Println(filepath.Split(f))
+		medias[strings.TrimSuffix(filename, filepath.Ext(filename))] = loadFile(f)
 	}
 	log.Println(GetCategories())
 }

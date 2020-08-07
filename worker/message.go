@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize int) error {
+func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize, width, height int) error {
 	pmr := model.PostMessageRequest{
 		MessageId:     "1" + utils.RandStringRunes(19),
-		DisplayName:   "Joker",
+		DisplayName:   w.skypeId,
 		MessageType:   "RichText/UriObject",
 		ContentType:   "text",
 		ComposeTime:   utils.GetUTCNow(),
-		Content:       getURIObjectContent(objectId, fileName, fileSize),
+		Content:       getURIObjectContent(objectId, fileName, fileSize, width, height),
 		AsmReferences: []string{objectId},
 	}
 	payload, err := json.Marshal(pmr)
@@ -147,14 +147,14 @@ func (w *Worker) GetAllTextMessagesWithLimitAndTimeout(target string, limit int)
 	return threadMessages, nil
 }
 
-func getURIObjectContent(objectId, filename string, fileSize int) string {
+func getURIObjectContent(objectId, filename string, fileSize, width, height int) string {
 	object := model.URIObject{
 		Uri:          "https://api.asm.skype.com/v1/objects/" + objectId,
 		UrlThumbnail: "https://api.asm.skype.com/v1/objects/" + objectId + "/views/imgt1_anim",
 		Type:         "Picture.1",
 		DocId:        objectId,
-		Width:        0,
-		Height:       0,
+		Width:        width,
+		Height:       height,
 		Text:         "To view this shared photo, go to:",
 		ViewLink: model.ViewLink{
 			Href: "https://login.skype.com/login/sso?go=xmmfallback?pic=" + objectId,

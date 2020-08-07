@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/model"
 	"log"
 	"path"
@@ -12,23 +13,11 @@ import (
 func (w *Worker) ProcessMessage(evt *model.MessageEvent) error {
 	threadId, from := parseInfo(evt)
 	log.Println("Processing message from", from, "on thread", threadId)
-
 	if evt.Type == "EventMessage" && evt.ResourceType == "NewMessage" && evt.Resource.MessageType == "RichText" {
 		if w.isDirectMention(evt) {
-			log.Println("Direct mention. Processing command...")
-			w.processCommand(evt)
+			w.processMention(evt)
 		}
 	} else {
-		//fromUser := strings.TrimPrefix(from, "8:")
-		//
-		//actions := IsRuleMatched(threadId, fromUser)
-		//if len(actions) == 0 {
-		//	log.Println("No action taken")
-		//	return nil
-		//}
-		//for _, action := range actions {
-		//	go w.TakeAction(evt, action)
-		//}
 	}
 
 	return nil
@@ -41,10 +30,7 @@ func (w *Worker) getMentionPrefix() (string) {
 func (w *Worker) isDirectMention(evt *model.MessageEvent) bool {
 	return strings.HasPrefix(strings.TrimSpace(evt.Resource.Content), w.getMentionPrefix())
 }
-func (w *Worker) processCommand(event *model.MessageEvent) {
-	//r := regexp.MustCompile(`<at id="(.*)?">(.*?)</at>`)
-	//mentionTag := r.FindAllString(event.Resource.Content, -1)[0]
-	//log.Println(mentionTag)
+func (w *Worker) processMention(event *model.MessageEvent) {
 	r := regexp.MustCompile(`^<at id="(.*?)">(.*?)</at>(.*?)$`)
 	founds := r.FindAllStringSubmatch(event.Resource.Content, -1)
 	if len(founds) > 0 {
@@ -53,38 +39,48 @@ func (w *Worker) processCommand(event *model.MessageEvent) {
 		command := string(founds[0][3])
 		log.Println("mention", mention, "name", name, "command", command)
 		trimmed := strings.TrimSpace(command)
-		if trimmed == "random" {
-			w.sendRandomImage("", event)
-		} else {
-			r := regexp.MustCompile("^random ([0-9]*?)$")
-			chunks := r.FindAllStringSubmatch(trimmed, -1)
-			if len(chunks) > 0 {
-				log.Println(chunks)
-				if count, err := strconv.Atoi(chunks[0][1]); err == nil {
-					for i := 0; i < count; i ++ {
-						go func() {
-							w.sendRandomImage("", event)
-						}()
-					}
-				}
-			} else {
-				r := regexp.MustCompile("^(.*?) ([0-9]*?)$")
-				chunks := r.FindAllStringSubmatch(trimmed, -1)
-				if len(chunks) > 0 {
-					log.Println(chunks)
-					if count, err := strconv.Atoi(chunks[0][2]); err == nil {
-						for i := 0; i < count; i ++ {
-							go func() {
-								w.sendRandomImage(chunks[0][1], event)
-							}()
-						}
-					}
-				} else {
+		w.processCommand(trimmed, event)
+	}
+}
+
+func (w *Worker) processCommand(trimmed string, event *model.MessageEvent) {
+	if trimmed == "keyword" || trimmed == "keyworks" {
+		threadId, _ := parseInfo(event)
+		w.PostTextMessage(threadId, strings.Join(media.GetCategories(), "\n"))
+		return
+	}
+	if trimmed == "random" {
+		w.sendRandomImage("", event)
+		return
+	}
+
+	r := regexp.MustCompile("^random ([0-9]*?)$")
+	chunks := r.FindAllStringSubmatch(trimmed, -1)
+	if len(chunks) > 0 {
+		log.Println(chunks)
+		if count, err := strconv.Atoi(chunks[0][1]); err == nil {
+			for i := 0; i < count; i ++ {
+				go func() {
+					w.sendRandomImage("", event)
+				}()
+			}
+		}
+	} else {
+		r := regexp.MustCompile("^(.*?) ([0-9]*?)$")
+		chunks := r.FindAllStringSubmatch(trimmed, -1)
+		if len(chunks) > 0 {
+			log.Println(chunks)
+			if count, err := strconv.Atoi(chunks[0][2]); err == nil {
+				for i := 0; i < count; i ++ {
 					go func() {
-						w.sendRandomImage(trimmed, event)
+						w.sendRandomImage(chunks[0][1], event)
 					}()
 				}
 			}
+		} else {
+			go func() {
+				w.sendRandomImage(trimmed, event)
+			}()
 		}
 	}
 }

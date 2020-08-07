@@ -1,0 +1,7 @@
+---
+applications:
+- name: skypebot-go
+  memory: 24M
+  instances: 1
+  command: skypebot-go
+  random-route: true

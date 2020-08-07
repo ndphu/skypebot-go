@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
 	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/model"
+	"image"
+	_ "image/jpeg"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -289,7 +290,6 @@ func (w *Worker) startPolling() {
 				logHeaders(headers)
 				return
 			}
-			fmt.Println(string(body))
 			pr := model.PollingResponse{}
 			if err := json.Unmarshal(body, &pr); err != nil {
 				continue
@@ -327,7 +327,11 @@ func (w *Worker) sendRandomImage(category string, event *model.MessageEvent) err
 	var mediaUrl string
 	var mediaPayload []byte
 	for {
-		mediaUrl = media.RandomMediaUrl(category, 1)[0]
+		urls := media.RandomMediaUrl(category, 1)
+		if len(urls) == 0 {
+			break
+		}
+		mediaUrl = urls[0]
 		payload, err := media.DownloadMediaUrl(mediaUrl)
 		if err != nil {
 			continue
@@ -338,7 +342,9 @@ func (w *Worker) sendRandomImage(category string, event *model.MessageEvent) err
 		mediaPayload = payload
 		break
 	}
-
+	if len(mediaPayload) == 0 {
+		return nil
+	}
 	filename := path.Base(mediaUrl)
 	transId := uuid.New().String()
 	threadId, _ := parseInfo(event)
@@ -352,10 +358,23 @@ func (w *Worker) sendRandomImage(category string, event *model.MessageEvent) err
 		log.Println("Fail to upload object", objectId, transId)
 		return err
 	}
+	c, _, e := image.DecodeConfig(bytes.NewReader(mediaPayload))
+	var width = 0
+	var height = 0
+	if e != nil {
+		log.Println("fail to decode image config", e)
+	} else {
+		width = c.Width
+		height = c.Height
+	}
 	try := 0
 	var postError error
 	for ; try < 3; {
-		if postError = w.PostImageToThread(threadId, objectId, filename, len(mediaPayload)); postError != nil {
+		if postError = w.PostImageToThread(threadId,
+			objectId,
+			filename,
+			len(mediaPayload),
+			width, height); postError != nil {
 			time.Sleep(2 * time.Second)
 		} else {
 			break
