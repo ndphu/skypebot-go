@@ -7,10 +7,7 @@ import (
 	"errors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
-	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/model"
-	"image"
-	_ "image/jpeg"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -18,7 +15,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var ErrorFailToCreateEndpoint = errors.New("fail to create endpoint")
@@ -57,9 +53,15 @@ type Worker struct {
 	id                string
 	status            Status
 	skypeId           string
+	healthCheckThread string
+	autoRestart       bool
+	statusCallback    StatusCallback
+	username          string
+	password          string
 }
 
 type EventCallback func(worker *Worker, event *model.MessageEvent)
+type StatusCallback func(worker *Worker)
 
 func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) {
 	w := &Worker{
@@ -74,6 +76,7 @@ func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) 
 		eventCallback: func(worker *Worker, event *model.MessageEvent) {
 			worker.ProcessMessage(event)
 		},
+		autoRestart: true,
 	}
 	if eventCallback != nil {
 		w.eventCallback = eventCallback
@@ -83,7 +86,6 @@ func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) 
 		return nil, err
 	}
 	// create endpoint
-
 	return w, nil
 }
 
@@ -235,6 +237,7 @@ func (w *Worker) start() error {
 		log.Println("Fail to create endpoint", err)
 		return err
 	}
+	w.startHealthCheck()
 	return w.subscribe()
 }
 
@@ -256,6 +259,9 @@ func (w *Worker) startPolling() {
 		log.Println("Worker stopped successfully")
 		w.status = StatusStopped
 		w.stopRequest <- true
+		if w.statusCallback != nil {
+			go w.statusCallback(w)
+		}
 	}()
 	client := http.Client{}
 	resultChan := make(chan HttpResult)
@@ -311,6 +317,7 @@ func (w *Worker) startPolling() {
 func (w *Worker) setEndpointHeader(req *http.Request) {
 	req.Header.Set("EndpointId", w.endpoint)
 }
+
 func (w *Worker) Reload(skypeToken string) error {
 	if skypeToken != "" {
 		w.Stop()
@@ -319,68 +326,21 @@ func (w *Worker) Reload(skypeToken string) error {
 	}
 	return ErrorEmptySkypeToken
 }
-func (w *Worker) sendRandomImage(category string, event *model.MessageEvent) error {
-	if category == "" {
-		category = media.GetCategories()[0]
+
+func (w *Worker) Restart() (error) {
+	if err := w.Stop(); err != nil {
+		log.Println("Fail to stop worker")
+		return err
 	}
-	log.Println("Send random image for category", category)
-	var mediaUrl string
-	var mediaPayload []byte
-	for {
-		urls := media.RandomMediaUrl(category, 1)
-		if len(urls) == 0 {
-			break
-		}
-		mediaUrl = urls[0]
-		payload, err := media.DownloadMediaUrl(mediaUrl)
+	if w.username != "" && w.password != "" {
+		token, err := Login(w.username, w.password)
 		if err != nil {
-			continue
+			w.skypeToken = token
 		}
-		if len(payload) == 503 {
-			continue
-		}
-		mediaPayload = payload
-		break
 	}
-	if len(mediaPayload) == 0 {
-		return nil
-	}
-	filename := path.Base(mediaUrl)
-	transId := uuid.New().String()
-	threadId, _ := parseInfo(event)
-	objectId, err := w.CreateObject(threadId, filename, transId)
-
-	if err != nil {
-		log.Println("Fail to create object", transId, err)
+	if err := w.init(); err != nil {
+		log.Println("Fail to init worker")
 		return err
 	}
-	if err := w.UploadObject(objectId, transId, mediaPayload); err != nil {
-		log.Println("Fail to upload object", objectId, transId)
-		return err
-	}
-	c, _, e := image.DecodeConfig(bytes.NewReader(mediaPayload))
-	var width = 0
-	var height = 0
-	if e != nil {
-		log.Println("fail to decode image config", e)
-	} else {
-		width = c.Width
-		height = c.Height
-	}
-	try := 0
-	var postError error
-	for ; try < 3; {
-		if postError = w.PostImageToThread(threadId,
-			objectId,
-			filename,
-			len(mediaPayload),
-			width, height); postError != nil {
-			time.Sleep(2 * time.Second)
-		} else {
-			break
-		}
-		try ++
-	}
-	return nil
-
+	return w.Start()
 }

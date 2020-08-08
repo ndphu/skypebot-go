@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 func (w *Worker) setRequestHeaders(req *http.Request) {
@@ -49,4 +50,18 @@ func parseHttpResponse(resp *http.Response, err error) (int, http.Header, []byte
 		return resp.StatusCode, resp.Header, nil, err
 	}
 	return resp.StatusCode, resp.Header, respBody, nil
+}
+
+func (w *Worker) postWithRetry(function func() error, retry int, sleepInterval time.Duration) error {
+	try := 0
+	var postError error
+	for ; try < 3; {
+		if postError = function(); postError != nil {
+			time.Sleep(sleepInterval)
+		} else {
+			return nil
+		}
+		try ++
+	}
+	return postError
 }

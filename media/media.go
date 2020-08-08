@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ func init() {
 		log.Println(filepath.Split(f))
 		medias[strings.TrimSuffix(filename, filepath.Ext(filename))] = loadFile(f)
 	}
-	log.Println(GetCategories())
+	log.Println(GetKeywords())
 }
 
 func loadFile(f string) []string {
@@ -53,16 +54,17 @@ func loadFile(f string) []string {
 	return medias
 }
 
-func GetCategories() []string {
-	cats := make([]string, 0)
+func GetKeywords() []string {
+	keywords := make([]string, 0)
 	for k := range medias {
-		cats = append(cats, k)
+		keywords = append(keywords, k)
 	}
-	return cats
+	sort.Strings(keywords)
+	return keywords
 }
 
-func RandomMediaUrl(category string, count int) []string {
-	urls, exists := medias[category]
+func RandomMediaUrl(keyword string, count int) []string {
+	urls, exists := medias[keyword]
 	if !exists {
 		return []string{}
 	}

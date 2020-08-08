@@ -11,8 +11,11 @@ var workers = make(map[string]*Worker)
 var workersLock = sync.RWMutex{}
 
 type SavedWorker struct {
-	Id         string `json:"id"`
-	SkypeToken string `json:"skypeToken"`
+	Id                string `json:"id"`
+	SkypeToken        string `json:"skypeToken"`
+	Username          string `json:"username"`
+	Password          string `json:"password"`
+	HealthCheckThread string `json:"healthCheckThread"`
 }
 
 func init() {
@@ -25,11 +28,23 @@ func init() {
 			return
 		}
 		for _, savedWorker := range savedWorkers {
+			if savedWorker.Username != "" && savedWorker.Password != "" {
+				token, err := Login(savedWorker.Username, savedWorker.Password)
+				if err == nil {
+					savedWorker.SkypeToken = token
+				}
+			}
 			worker, err := NewWorker(savedWorker.SkypeToken, nil)
 			if err != nil {
 				log.Println("Fail to restore worker", savedWorker.Id)
 			}
 			worker.id = savedWorker.Id
+			worker.healthCheckThread = savedWorker.HealthCheckThread
+			// TODO
+			if savedWorker.Username != "" && savedWorker.Password != "" {
+				worker.username = savedWorker.Username
+				worker.password = savedWorker.Password
+			}
 			if err := worker.Start(); err != nil {
 				log.Println("Fail to start worker", worker.id, "from saved file")
 			} else {
@@ -48,10 +63,17 @@ func FindWorker(workerId string) (w *Worker) {
 	return nil
 }
 
+func workerStatusCallback(worker *Worker) {
+	if worker.autoRestart {
+		worker.Restart()
+	}
+}
+
 func AddWorker(w *Worker) {
 	workersLock.Lock()
 	defer workersLock.Unlock()
 	workers[w.id] = w
+	w.statusCallback = workerStatusCallback
 }
 
 func SaveWorkers() error {
