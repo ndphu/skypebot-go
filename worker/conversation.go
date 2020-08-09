@@ -10,7 +10,7 @@ import (
 
 func (w *Worker) GetConversations(limit int) ([]model.Conversation, error) {
 	conversations := make([]model.Conversation, 0)
-	req, _ := http.NewRequest("GET", w.mediaBaseUrl+"/v1/users/ME/conversations?view=supportsExtendedHistory%7Cmsnp24Equivalent&startTime=1&targetType=Passport%7CSkype%7CLync%7CThread%7CAgent%7CShortCircuit%7CPSTN%7CFlxt%7CNotificationStream%7CCortanaBot%7CModernBots%7CsecureThreads%7CInviteFree", nil)
+	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations?view=supportsExtendedHistory%7Cmsnp24Equivalent&startTime=1&targetType=Passport%7CSkype%7CLync%7CThread%7CAgent%7CShortCircuit%7CPSTN%7CFlxt%7CNotificationStream%7CCortanaBot%7CModernBots%7CsecureThreads%7CInviteFree", nil)
 	w.setRequestHeaders(req)
 	q := req.URL.Query()
 	q.Set("pageSize", strconv.Itoa(limit))

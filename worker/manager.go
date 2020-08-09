@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"github.com/ndphu/skypebot-go/utils"
 	"io/ioutil"
 	"log"
 	"sync"
@@ -71,25 +72,13 @@ func FindWorker(workerId string) (w *Worker) {
 func workerStatusCallback(worker *Worker) {
 	if worker.autoRestart {
 		//worker.Restart()
-		go executeWithRetry(func() error {
+		go utils.ExcuteWithRetryTimes(func() error {
 			return worker.Restart()
-		}, -1, 10*time.Second)
+		}, utils.RetryParams{
+			Retry: 0,
+			SleepInterval: 30 * time.Second,
+		})
 	}
-}
-
-// TODO
-func executeWithRetry(function func() error, retry int, sleepInterval time.Duration) error {
-	try := 0
-	var execError error
-	for ; retry < 0 || try < retry; {
-		if execError = function(); execError != nil {
-			time.Sleep(sleepInterval)
-		} else {
-			return nil
-		}
-		try ++
-	}
-	return execError
 }
 
 func AddWorker(w *Worker) {

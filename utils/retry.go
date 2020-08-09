@@ -7,16 +7,13 @@ type RetryParams struct {
 	SleepInterval time.Duration `json:"sleepInterval"`
 }
 
-func ExcuteWithRetryTimes(function func()error, params RetryParams) error {
-	if params.Retry == 0 {
-		params.Retry = 5
-	}
+func ExcuteWithRetryTimes(function func() error, params RetryParams) error {
 	if params.SleepInterval == 0 {
 		params.SleepInterval = 2 * time.Second
 	}
 	try := 0
 	var postError error
-	for ; try < params.Retry; {
+	for ; try < params.Retry || params.Retry == 0; {
 		if postError = function(); postError != nil {
 			time.Sleep(params.SleepInterval)
 		} else {
@@ -28,8 +25,8 @@ func ExcuteWithRetryTimes(function func()error, params RetryParams) error {
 }
 
 func ExecuteWithRetry(function func() error) error {
-		return ExcuteWithRetryTimes(function, RetryParams{
-			Retry: 5,
-			SleepInterval: 2 * time.Second,
-		})
+	return ExcuteWithRetryTimes(function, RetryParams{
+		Retry:         5,
+		SleepInterval: 2 * time.Second,
+	})
 }
