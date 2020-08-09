@@ -41,10 +41,10 @@ func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize, 
 	return nil
 }
 
-func (w *Worker) PostTextMessage(target, text string) (error) {
+func (w *Worker) SendTextMessage(target, text string) (error) {
 	pmr := model.PostMessageRequest{
 		MessageId:   "1" + utils.RandStringRunes(19),
-		DisplayName: "/dev/null",
+		DisplayName: w.skypeId,
 		MessageType: "RichText",
 		ContentType: "text",
 		ComposeTime: utils.GetUTCNow(),
@@ -57,7 +57,15 @@ func (w *Worker) PostTextMessage(target, text string) (error) {
 	}
 	req, _ := http.NewRequest("POST", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages", bytes.NewReader(payload))
 	w.setRequestHeaders(req)
-	w.executeHttpRequest(req)
+	status, headers, body, err := w.executeHttpRequest(req)
+	if err != nil {
+		return err
+	}
+	if status != 201 {
+		log.Println("Fail to send text message by error", status, string(body))
+		logHeaders(headers)
+		return ErrorFailToSendTextMessage
+	}
 	log.Println("Post message successfully")
 	return nil
 }

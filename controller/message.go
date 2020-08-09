@@ -21,7 +21,7 @@ func Messages(r * gin.RouterGroup)  {
 				c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
 				return
 			}
-			if err := w.PostTextMessage(req.Target, req.Text); err != nil {
+			if err := w.SendTextMessage(req.Target, req.Text); err != nil {
 				c.AbortWithStatusJSON(500, gin.H{"error": err})
 				return
 			}

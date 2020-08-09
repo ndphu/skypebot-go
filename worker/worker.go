@@ -23,6 +23,8 @@ var ErrorEmptySkypeToken = errors.New("empty skype token")
 var ErrorFailToCreateSubscription = errors.New("fail to create subscription")
 var ErrorFailPolling = errors.New("fail polling")
 var ErrorFailToPostMediaMessage = errors.New("fail to post media message")
+var ErrorLocationChanged = errors.New("location changed")
+var ErrorFailToSendTextMessage = errors.New("fail to send text message")
 
 const defaultMediaBaseUrl = "https://api.asm.skype.com"
 
@@ -42,22 +44,24 @@ type WorkerData struct {
 }
 
 type Worker struct {
-	stopRequest       chan bool
-	endpoint          string
-	skypeToken        string
-	registrationToken string
-	subscriptionId    int
-	eventCallback     EventCallback
-	baseUrl           string
-	mediaBaseUrl      string
-	id                string
-	status            Status
-	skypeId           string
-	healthCheckThread string
-	autoRestart       bool
-	statusCallback    StatusCallback
-	username          string
-	password          string
+	stopRequest        chan bool
+	endpoint           string
+	skypeToken         string
+	registrationToken  string
+	subscriptionId     int
+	eventCallback      EventCallback
+	baseUrl            string
+	mediaBaseUrl       string
+	id                 string
+	status             Status
+	skypeId            string
+	healthCheckThread  string
+	autoRestart        bool
+	statusCallback     StatusCallback
+	username           string
+	password           string
+	managers           []string
+	nsfwEnabledThreads []string
 }
 
 type EventCallback func(worker *Worker, event *model.MessageEvent)
@@ -101,13 +105,28 @@ func (w *Worker) Data() WorkerData {
 
 func (w *Worker) Start() (error) {
 	w.status = StatusStarting
-	if err := w.createEndpoint(); err != nil {
-		return err
+	err := w.createEndpoint()
+	if err != nil {
+		log.Println("Fail to create endpoint", err)
+		if err == ErrorLocationChanged {
+			log.Println("Location changed. Try to create endpoint again with new location.")
+			if recreateError := w.createEndpoint(); recreateError != nil {
+				log.Println("Fail to re-create endpoint")
+				return recreateError
+			}
+		} else {
+			return err
+		}
 	}
-	return w.start()
+	w.startHealthCheck()
+	return w.subscribe()
 }
 
 func (w *Worker) Stop() error {
+	if w.status != StatusRunning {
+		log.Println("Worker is not running.")
+		return nil
+	}
 	w.status = StatusStopping
 	log.Println("Stopping worker...")
 	w.stopRequest <- true
@@ -126,6 +145,19 @@ func (w *Worker) createEndpoint() error {
 	}
 	if status != 201 {
 		log.Println("Fail to create endpoint", string(body))
+		se := model.SkypeError{}
+		if err := json.Unmarshal(body, &se); err != nil {
+			log.Println("Fail to unmarshal Skype error", string(body))
+			return err
+		} else {
+			if se.ErrorCode == 752 {
+				// different cloud
+				newLocation := headers.Get("Location")
+				log.Println("Different cloud error. New location is:", newLocation)
+				w.baseUrl = newLocation
+				return ErrorLocationChanged
+			}
+		}
 		return err
 	}
 	regToken := headers.Get("Set-RegistrationToken")
@@ -229,16 +261,6 @@ func (w *Worker) subscribe() error {
 	w.subscriptionId, _ = strconv.Atoi(path.Base(headers.Get("Location")))
 	go w.startPolling()
 	return nil
-}
-
-func (w *Worker) start() error {
-	err := w.createEndpoint()
-	if err != nil {
-		log.Println("Fail to create endpoint", err)
-		return err
-	}
-	w.startHealthCheck()
-	return w.subscribe()
 }
 
 type HttpResult struct {

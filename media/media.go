@@ -16,6 +16,34 @@ import (
 var medias = make(map[string][]string)
 
 func init() {
+	ReloadMedias()
+}
+
+func loadFile(f string) []string {
+	log.Println("Loading resource:", f)
+	file, err := os.Open(f)
+	if err != nil {
+		log.Println("url file not found")
+		return nil
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	medias := make([]string, 0)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasSuffix(line, "mp4") || strings.HasSuffix(line, "gif") {
+			continue
+		}
+		if line == "" {
+			continue
+		}
+		medias = append(medias, line)
+	}
+	log.Println(f, "contains", len(medias), "items")
+	return medias
+}
+
+func ReloadMedias() error {
 	var files []string
 	if err := filepath.Walk("resources", func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
@@ -23,7 +51,7 @@ func init() {
 		}
 		return nil
 	}); err != nil {
-		panic(err)
+		return err
 	}
 
 	for _, f := range files {
@@ -32,26 +60,7 @@ func init() {
 		medias[strings.TrimSuffix(filename, filepath.Ext(filename))] = loadFile(f)
 	}
 	log.Println(GetKeywords())
-}
-
-func loadFile(f string) []string {
-	log.Println("Loading resource:", f)
-	file, err := os.Open(f)
-	if err != nil {
-		log.Println("url file not found")
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	medias := make([]string, 0)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasSuffix(line, "mp4") {
-			continue
-		}
-		medias = append(medias, line)
-	}
-	log.Println(f, "contains", len(medias), "items")
-	return medias
+	return nil
 }
 
 func GetKeywords() []string {

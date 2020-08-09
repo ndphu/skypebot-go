@@ -5,17 +5,20 @@ import (
 	"io/ioutil"
 	"log"
 	"sync"
+	"time"
 )
 
 var workers = make(map[string]*Worker)
 var workersLock = sync.RWMutex{}
 
 type SavedWorker struct {
-	Id                string `json:"id"`
-	SkypeToken        string `json:"skypeToken"`
-	Username          string `json:"username"`
-	Password          string `json:"password"`
-	HealthCheckThread string `json:"healthCheckThread"`
+	Id                string   `json:"id"`
+	SkypeToken        string   `json:"skypeToken"`
+	Username          string   `json:"username"`
+	Password          string   `json:"password"`
+	HealthCheckThread string   `json:"healthCheckThread"`
+	Managers          []string `json:"managers"`
+	NsfwEnabledThreads []string `json:"nsfwEnabledThreads"`
 }
 
 func init() {
@@ -40,6 +43,8 @@ func init() {
 			}
 			worker.id = savedWorker.Id
 			worker.healthCheckThread = savedWorker.HealthCheckThread
+			worker.managers = savedWorker.Managers
+			worker.nsfwEnabledThreads = savedWorker.NsfwEnabledThreads
 			// TODO
 			if savedWorker.Username != "" && savedWorker.Password != "" {
 				worker.username = savedWorker.Username
@@ -65,8 +70,26 @@ func FindWorker(workerId string) (w *Worker) {
 
 func workerStatusCallback(worker *Worker) {
 	if worker.autoRestart {
-		worker.Restart()
+		//worker.Restart()
+		go executeWithRetry(func() error {
+			return worker.Restart()
+		}, -1, 10*time.Second)
 	}
+}
+
+// TODO
+func executeWithRetry(function func() error, retry int, sleepInterval time.Duration) error {
+	try := 0
+	var execError error
+	for ; retry < 0 || try < retry; {
+		if execError = function(); execError != nil {
+			time.Sleep(sleepInterval)
+		} else {
+			return nil
+		}
+		try ++
+	}
+	return execError
 }
 
 func AddWorker(w *Worker) {

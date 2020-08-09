@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/worker"
 )
 
@@ -60,6 +61,14 @@ func Manage(r *gin.RouterGroup) {
 				c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			} else {
 				c.JSON(200, gin.H{"success": true})
+			}
+		})
+
+		manage.POST("/reloadMedia", func(c *gin.Context) {
+			if err := media.ReloadMedias(); err != nil {
+				c.JSON(500, gin.H{"error": err})
+			} else {
+				c.JSON(200, gin.H{"success": true, "keywords": media.GetKeywords()})
 			}
 		})
 	}

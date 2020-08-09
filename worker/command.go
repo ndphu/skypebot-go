@@ -2,6 +2,7 @@ package worker
 
 import (
 	"github.com/ndphu/skypebot-go/model"
+	"log"
 	"path"
 	"strings"
 )
@@ -9,16 +10,16 @@ import (
 func (w *Worker) isDirectIM(event *model.MessageEvent) bool {
 	return path.Base(event.Resource.ConversationLink) == path.Base(event.Resource.From)
 }
-func (w *Worker) processDirectIM(event *model.MessageEvent) {
-	content := event.Resource.Content
-	commandString := w.normalizeMessageContent(content)
-	w.processCommand(commandString, event)
+
+func (w *Worker) isMessageFromManager(event *model.MessageEvent) bool {
+	return w.isDirectIM(event) && contains(w.managers, path.Base(event.Resource.From))
 }
 
-func (w *Worker) normalizeMessageContent(content string) string {
+func normalizeMessageContent(content string) string {
 	commandString := strings.ReplaceAll(content, "-", "")
 	commandString = strings.TrimSpace(commandString)
 	commandString = strings.ToLower(commandString)
+	log.Println("Normalized command:", commandString)
 	return commandString
 }
 

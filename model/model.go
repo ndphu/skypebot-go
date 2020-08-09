@@ -1,5 +1,7 @@
 package model
 
+import "path"
+
 type CreateObjectRequest struct {
 	Type        string              `json:"type"`
 	Filename    string              `json:"filename"`
@@ -62,6 +64,14 @@ type MessageEvent struct {
 	Resource     MessageResource `json:"resource"`
 }
 
+func (e*MessageEvent) GetThreadId() string {
+	return path.Base(e.Resource.ConversationLink)
+}
+
+func (e*MessageEvent) GetFrom() string {
+	return path.Base(e.Resource.From)
+}
+
 type MessageResource struct {
 	Type             string `json:"type"`
 	From             string `json:"from"`
@@ -78,4 +88,9 @@ type SubscriptionRequest struct {
 	ChannelType         string   `json:"channelType"`
 	ConversationType    int      `json:"conversationType"`
 	InterestedResources []string `json:"interestedResources"`
+}
+
+type SkypeError struct {
+	ErrorCode int `json:"errorCode"`
+	Message string `json:"message"`
 }

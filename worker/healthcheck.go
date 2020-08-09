@@ -1,6 +1,9 @@
 package worker
 
-import "time"
+import (
+	"github.com/ndphu/skypebot-go/utils"
+	"time"
+)
 
 func (w *Worker) startHealthCheck() {
 	if w.healthCheckThread != "" {
@@ -10,9 +13,9 @@ func (w *Worker) startHealthCheck() {
 
 func (w *Worker) doHealthCheck() {
 	for ; ; {
-		if err := w.postWithRetry(func() error {
-			return w.PostTextMessage(w.healthCheckThread, time.Now().Format(time.RFC3339))
-		}, 3, 2*time.Second); err != nil {
+		if err := utils.ExecuteWithRetry(func() error {
+			return w.SendTextMessage(w.healthCheckThread, time.Now().Format(time.RFC3339))
+		}); err != nil {
 			break
 		}
 		time.Sleep(5 *  time.Minute)
