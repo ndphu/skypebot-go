@@ -6,8 +6,28 @@ import (
 )
 
 func (w *Worker) startHealthCheck() {
+	go w.checkSkypeTokenExp()
+
 	if w.healthCheckThread != "" {
 		go w.doHealthCheck()
+	}
+}
+
+func (w*Worker) checkSkypeTokenExp()  {
+	ticker := time.NewTicker(5 * time.Second)
+	for {
+		select {
+		case <- ticker.C:
+			if w.ShouldRelogin() {
+				if w.username != "" && w.password != "" {
+					if token, err := Login(w.username, w.password); err == nil {
+						w.skypeToken = token
+						w.Restart()
+					}
+
+				}
+			}
+		}
 	}
 }
 

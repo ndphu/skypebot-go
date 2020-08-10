@@ -39,6 +39,6 @@ token
 
 *.exe
 
-resources
+resources*
 
 workers.json

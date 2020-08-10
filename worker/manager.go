@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/ndphu/skypebot-go/utils"
 	"io/ioutil"
 	"log"
@@ -32,12 +33,26 @@ func init() {
 			return
 		}
 		for _, savedWorker := range savedWorkers {
-			if savedWorker.Username != "" && savedWorker.Password != "" {
+			shouldRelogin := false
+			jwt.Parse(savedWorker.SkypeToken, func(token *jwt.Token) (interface{}, error) {
+				claims := token.Claims.(jwt.MapClaims)
+				expiredAt := time.Unix(int64(claims["exp"].(float64)),0 )
+				log.Println(expiredAt)
+				remaining := expiredAt.Sub(time.Now())
+				log.Println("token remaining time", remaining)
+				if remaining < time.Hour {
+					shouldRelogin = true
+				}
+				return nil, nil
+			})
+			log.Println("should re-login:", shouldRelogin)
+			if shouldRelogin && savedWorker.Username != "" && savedWorker.Password != "" {
 				token, err := Login(savedWorker.Username, savedWorker.Password)
 				if err == nil {
 					savedWorker.SkypeToken = token
 				}
 			}
+
 			worker, err := NewWorker(savedWorker.SkypeToken, nil)
 			if err != nil {
 				log.Println("Fail to restore worker", savedWorker.Id)
@@ -72,7 +87,7 @@ func FindWorker(workerId string) (w *Worker) {
 func workerStatusCallback(worker *Worker) {
 	if worker.autoRestart {
 		//worker.Restart()
-		go utils.ExcuteWithRetryTimes(func() error {
+		go utils.ExecuteWithRetryTimes(func() error {
 			return worker.Restart()
 		}, utils.RetryParams{
 			Retry: 0,

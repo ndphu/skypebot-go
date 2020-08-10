@@ -8,6 +8,7 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
 	"github.com/ndphu/skypebot-go/model"
+	"github.com/ndphu/skypebot-go/utils"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var ErrorFailToCreateEndpoint = errors.New("fail to create endpoint")
@@ -25,6 +27,7 @@ var ErrorFailPolling = errors.New("fail polling")
 var ErrorFailToPostMediaMessage = errors.New("fail to post media message")
 var ErrorLocationChanged = errors.New("location changed")
 var ErrorFailToSendTextMessage = errors.New("fail to send text message")
+var ErrorFailToInitWorker = errors.New("fail to init worker")
 
 const defaultMediaBaseUrl = "https://api.asm.skype.com"
 
@@ -85,11 +88,6 @@ func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) 
 	if eventCallback != nil {
 		w.eventCallback = eventCallback
 	}
-	// set message base URL and registration token
-	if err := w.init(); err != nil {
-		return nil, err
-	}
-	// create endpoint
 	return w, nil
 }
 
@@ -105,8 +103,13 @@ func (w *Worker) Data() WorkerData {
 
 func (w *Worker) Start() (error) {
 	w.status = StatusStarting
-	err := w.createEndpoint()
-	if err != nil {
+	if err := utils.ExecuteWithRetryTimes(func() error {
+		return w.loadBaseUrl()
+	}, utils.RetryParams{Retry: 10, SleepInterval: 5*time.Second}); err != nil {
+		log.Println("Fail to load base url", err.Error())
+		return err
+	}
+	if err := w.createEndpoint(); err != nil {
 		log.Println("Fail to create endpoint", err)
 		if err == ErrorLocationChanged {
 			log.Println("Location changed. Try to create endpoint again with new location.")
@@ -198,7 +201,7 @@ func (w *Worker) getEndpoints() ([]model.Endpoint, error) {
 	return endpoints, nil
 }
 
-func (w *Worker) init() (error) {
+func (w *Worker) loadBaseUrl() (error) {
 	jwt.Parse(w.skypeToken, func(token *jwt.Token) (interface{}, error) {
 		claims := token.Claims.(jwt.MapClaims)
 		w.skypeId, _ = claims["skypeid"].(string)
@@ -214,6 +217,7 @@ func (w *Worker) init() (error) {
 		return err
 	}
 	defer resp.Body.Close()
+
 	location := resp.Header.Get("Location")
 	if resp.StatusCode == 200 {
 		location = "https://client-s.gateway.messenger.live.com"
@@ -224,16 +228,33 @@ func (w *Worker) init() (error) {
 			log.Println("Respond body", string(body))
 		}
 		return ErrorSkypeTokenExpired
+	} else if resp.StatusCode == 404 {
+		if body, err := ioutil.ReadAll(resp.Body); err == nil {
+			se := model.SkypeError{}
+			if err := json.Unmarshal(body, &se); err == nil {
+				if se.ErrorCode == 752 {
+					location = resp.Header.Get("Location")
+					log.Println("Correct cloud:", location)
+					parsedUrl, err := url.Parse(location)
+					if err != nil {
+						return err
+					}
+					w.baseUrl = parsedUrl.Scheme + "://" + parsedUrl.Host
+					w.registrationToken = resp.Header.Get("Set-RegistrationToken")
+					log.Println("Message base url:", w.baseUrl)
+					log.Println("Loaded endpoint and registration token successfully")
+					return nil
+				}
+			} else {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
-	parsedUrl, err := url.Parse(location)
-	if err != nil {
-		return err
-	}
-	w.baseUrl = parsedUrl.Scheme + "://" + parsedUrl.Host
-	w.registrationToken = resp.Header.Get("Set-RegistrationToken")
-	log.Println("Message base url:", w.baseUrl)
-	log.Println("Loaded endpoint and registration token successfully")
-	return nil
+	unknownResp, _ := ioutil.ReadAll(resp.Body)
+	log.Println("Fail to init worker. Server response is unexpected:", resp.StatusCode, string(unknownResp))
+	return ErrorFailToInitWorker
 }
 
 func (w *Worker) subscribe() error {
@@ -339,15 +360,15 @@ func (w *Worker) startPolling() {
 func (w *Worker) setEndpointHeader(req *http.Request) {
 	req.Header.Set("EndpointId", w.endpoint)
 }
-
-func (w *Worker) Reload(skypeToken string) error {
-	if skypeToken != "" {
-		w.Stop()
-		w.skypeToken = skypeToken
-		return w.init()
-	}
-	return ErrorEmptySkypeToken
-}
+//
+//func (w *Worker) Reload(skypeToken string) error {
+//	if skypeToken != "" {
+//		w.Stop()
+//		w.skypeToken = skypeToken
+//		return w.loadBaseUrl()
+//	}
+//	return ErrorEmptySkypeToken
+//}
 
 func (w *Worker) Restart() (error) {
 	if err := w.Stop(); err != nil {
@@ -360,9 +381,25 @@ func (w *Worker) Restart() (error) {
 			w.skypeToken = token
 		}
 	}
-	if err := w.init(); err != nil {
+	if err := w.loadBaseUrl(); err != nil {
 		log.Println("Fail to init worker")
 		return err
 	}
 	return w.Start()
+}
+
+func (w*Worker) ShouldRelogin() bool {
+	shouldRelogin := false
+	jwt.Parse(w.skypeToken, func(token *jwt.Token) (interface{}, error) {
+		claims := token.Claims.(jwt.MapClaims)
+		expiredAt := time.Unix(int64(claims["exp"].(float64)), 0)
+		log.Println(expiredAt)
+		remaining := expiredAt.Sub(time.Now())
+		log.Println("token remaining time", remaining)
+		if remaining < time.Hour {
+			shouldRelogin = true
+		}
+		return nil, nil
+	})
+	return shouldRelogin
 }

@@ -18,23 +18,23 @@ type LoginRequest struct {
 func Manage(r *gin.RouterGroup) {
 	manage := r.Group("/manage")
 	{
-		manage.POST("/token", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
-			if w == nil {
-				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
-				return
-			}
-			var token TokenRequest
-			if err := c.ShouldBindJSON(&token); err != nil {
-				c.AbortWithStatusJSON(400, gin.H{"message": "invalid token request"})
-				return
-			}
-			if err := w.Reload(token.Token); err != nil {
-				c.AbortWithStatusJSON(500, gin.H{"error": err})
-				return
-			}
-			c.JSON(200, gin.H{"success": true})
-		})
+		//manage.POST("/token", func(c *gin.Context) {
+		//	w := worker.FindWorker(c.GetHeader("workerId"))
+		//	if w == nil {
+		//		c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
+		//		return
+		//	}
+		//	var token TokenRequest
+		//	if err := c.ShouldBindJSON(&token); err != nil {
+		//		c.AbortWithStatusJSON(400, gin.H{"message": "invalid token request"})
+		//		return
+		//	}
+		//	if err := w.Reload(token.Token); err != nil {
+		//		c.AbortWithStatusJSON(500, gin.H{"error": err})
+		//		return
+		//	}
+		//	c.JSON(200, gin.H{"success": true})
+		//})
 		manage.POST("/login", func(c *gin.Context) {
 			var loginRequest LoginRequest
 			if err := c.ShouldBindJSON(&loginRequest); err != nil {
