@@ -46,6 +46,7 @@ func init() {
 				return nil, nil
 			})
 			log.Println("should re-login:", shouldRelogin)
+
 			if shouldRelogin && savedWorker.Username != "" && savedWorker.Password != "" {
 				token, err := Login(savedWorker.Username, savedWorker.Password)
 				if err == nil {

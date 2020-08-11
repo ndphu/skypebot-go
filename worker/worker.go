@@ -16,6 +16,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,24 +48,27 @@ type WorkerData struct {
 }
 
 type Worker struct {
-	stopRequest        chan bool
-	endpoint           string
-	skypeToken         string
-	registrationToken  string
-	subscriptionId     int
-	eventCallback      EventCallback
-	baseUrl            string
-	mediaBaseUrl       string
-	id                 string
-	status             Status
-	skypeId            string
-	healthCheckThread  string
-	autoRestart        bool
-	statusCallback     StatusCallback
-	username           string
-	password           string
-	managers           []string
-	nsfwEnabledThreads []string
+	lock                   sync.Mutex
+	stopRequest            chan bool
+	endpoint               string
+	skypeToken             string
+	registrationToken      string
+	subscriptionId         int
+	eventCallback          EventCallback
+	baseUrl                string
+	mediaBaseUrl           string
+	id                     string
+	status                 Status
+	skypeId                string
+	stopHealthCheckRequest chan bool
+	healthCheckTicker      *time.Ticker
+	healthCheckThread      string
+	autoRestart            bool
+	statusCallback         StatusCallback
+	username               string
+	password               string
+	managers               []string
+	nsfwEnabledThreads     []string
 }
 
 type EventCallback func(worker *Worker, event *model.MessageEvent)
@@ -105,7 +109,7 @@ func (w *Worker) Start() (error) {
 	w.status = StatusStarting
 	if err := utils.ExecuteWithRetryTimes(func() error {
 		return w.loadBaseUrl()
-	}, utils.RetryParams{Retry: 10, SleepInterval: 5*time.Second}); err != nil {
+	}, utils.RetryParams{Retry: 10, SleepInterval: 5 * time.Second}); err != nil {
 		log.Println("Fail to load base url", err.Error())
 		return err
 	}
@@ -134,6 +138,10 @@ func (w *Worker) Stop() error {
 	log.Println("Stopping worker...")
 	w.stopRequest <- true
 	<-w.stopRequest
+	if err := w.stopHealthCheck(); err != nil {
+		log.Println("Fail to stop health check")
+		return err
+	}
 	return nil
 }
 
@@ -254,7 +262,13 @@ func (w *Worker) loadBaseUrl() (error) {
 	}
 	unknownResp, _ := ioutil.ReadAll(resp.Body)
 	log.Println("Fail to init worker. Server response is unexpected:", resp.StatusCode, string(unknownResp))
-	return ErrorFailToInitWorker
+	logHeaders(resp.Header)
+	// TODO
+	w.baseUrl =  "https://client-s.gateway.messenger.live.com"
+	w.registrationToken = resp.Header.Get("Set-RegistrationToken")
+	log.Println("Message base url:", w.baseUrl)
+	log.Println("Loaded endpoint and registration token successfully")
+	return nil
 }
 
 func (w *Worker) subscribe() error {
@@ -299,7 +313,7 @@ func (w *Worker) startPolling() {
 	}()
 
 	defer func() {
-		log.Println("Worker stopped successfully")
+		log.Println("Worker stopped successfully.")
 		w.status = StatusStopped
 		w.stopRequest <- true
 		if w.statusCallback != nil {
@@ -360,35 +374,18 @@ func (w *Worker) startPolling() {
 func (w *Worker) setEndpointHeader(req *http.Request) {
 	req.Header.Set("EndpointId", w.endpoint)
 }
-//
-//func (w *Worker) Reload(skypeToken string) error {
-//	if skypeToken != "" {
-//		w.Stop()
-//		w.skypeToken = skypeToken
-//		return w.loadBaseUrl()
-//	}
-//	return ErrorEmptySkypeToken
-//}
 
 func (w *Worker) Restart() (error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if err := w.Stop(); err != nil {
 		log.Println("Fail to stop worker")
-		return err
-	}
-	if w.username != "" && w.password != "" {
-		token, err := Login(w.username, w.password)
-		if err != nil {
-			w.skypeToken = token
-		}
-	}
-	if err := w.loadBaseUrl(); err != nil {
-		log.Println("Fail to init worker")
 		return err
 	}
 	return w.Start()
 }
 
-func (w*Worker) ShouldRelogin() bool {
+func (w *Worker) ShouldRelogin() bool {
 	shouldRelogin := false
 	jwt.Parse(w.skypeToken, func(token *jwt.Token) (interface{}, error) {
 		claims := token.Claims.(jwt.MapClaims)
