@@ -13,7 +13,8 @@ func (w *Worker) ProcessMessage(evt *model.MessageEvent) error {
 	log.Println("Processing message from", from, "on thread", threadId)
 	if evt.Type == "EventMessage" && evt.ResourceType == "NewMessage" && evt.Resource.MessageType == "RichText" {
 		if w.isMessageFromManager(evt) {
-			go w.processManageIM(evt)
+			//go w.processManageIM(evt)
+			go w.HandleAdminCommand(evt)
 			return nil
 		}
 

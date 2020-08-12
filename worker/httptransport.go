@@ -46,7 +46,7 @@ func (w *Worker) executeHttpRequest(req *http.Request) (status int, headers http
 				log.Println("Cloud location changed. Re-execute with new URL:", newUrl)
 				if parse, err := url.Parse(newUrl); err == nil {
 					w.baseUrl = parse.Scheme + "://" + parse.Host
-					return w.executeHttpRequest(req)
+					return -1, nil, nil, ErrorCloudLocationChanged
 				}
 			}
 		}

@@ -29,6 +29,7 @@ var ErrorFailToPostMediaMessage = errors.New("fail to post media message")
 var ErrorLocationChanged = errors.New("location changed")
 var ErrorFailToSendTextMessage = errors.New("fail to send text message")
 var ErrorFailToInitWorker = errors.New("fail to init worker")
+var ErrorCloudLocationChanged = errors.New("cloud location changed")
 
 const defaultMediaBaseUrl = "https://api.asm.skype.com"
 

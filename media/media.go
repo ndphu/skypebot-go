@@ -45,7 +45,7 @@ func loadFile(f string) []string {
 
 func ReloadMedias() error {
 	var files []string
-	if err := filepath.Walk("resources", func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(`D:\tmp\rrr`, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

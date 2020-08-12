@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/skypebot-go/model"
 	"github.com/ndphu/skypebot-go/worker"
 )
 
@@ -44,4 +45,25 @@ func WorkerController(r *gin.RouterGroup)  {
 		}
 		c.JSON(200, gin.H{"success": true, "worker": w.Data()})
 	})
+
+
+	r.POST("/worker/:workerId/message/text", func(c *gin.Context) {
+		w := worker.FindWorker(c.Param("workerId"))
+		if w == nil {
+			c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
+			return
+		}
+		req := model.PostTextMessageRequest{}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.AbortWithStatusJSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		if err := w.SendTextMessage(req.Target, req.Text); err != nil {
+			c.AbortWithStatusJSON(500, gin.H{"error": err})
+			return
+		}
+		c.JSON(200, gin.H{"success": true})
+	})
+
+
 }
