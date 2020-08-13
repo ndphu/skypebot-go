@@ -3,7 +3,7 @@ package model
 type Conversation struct {
 	Id         string `json:"id"`
 	Type       string `json:"type"`
-	Version    int    `json:"version"`
+	Version    int64    `json:"version"`
 	TargetLink string `json:"targetLink"`
 	Topic      string `json:"topic"`
 }
@@ -19,7 +19,7 @@ type ThreadProperties struct {
 type ConversationObject struct {
 	Id               string           `json:"id"`
 	Type             string           `json:"type"`
-	Version          int              `json:"version"`
+	Version          int64             `json:"version"`
 	TargetLink       string           `json:"targetLink"`
 	ThreadProperties ThreadProperties `json:"threadProperties"`
 }
