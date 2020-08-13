@@ -8,6 +8,7 @@ import (
 	"github.com/ndphu/skypebot-go/utils"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
+	"path"
 	"strings"
 )
 
@@ -37,9 +38,81 @@ func (w *Worker) ConversationCommand() *cli.Command {
 					table := tablewriter.NewWriter(c.App.Writer)
 					table.SetHeader([]string{"Name", "ID"})
 					for _, conversation := range conversations {
-						table.Append([]string{conversation.Id, conversation.Topic})
+						shortId := strings.TrimPrefix(conversation.Id, "19:")
+						shortId = strings.TrimSuffix(shortId, "@thread.skype")
+						table.Append([]string{shortId, conversation.Topic})
 					}
 					table.Render()
+					return nil
+				},
+			},
+			{
+				Name:    "list-message",
+				Aliases: []string{"lm"},
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "thread",
+						Aliases:  []string{"t"},
+						Usage:    "coversation ID to list messages",
+						Required: true,
+					},
+				},
+				Usage: "list all message in the conversation",
+				Action: func(c *cli.Context) error {
+					threadId := c.String("thread")
+					if !strings.HasPrefix(threadId, "19:") {
+						threadId = "19:" + threadId
+					}
+					if !strings.HasSuffix(threadId, "@thread.skype") {
+						threadId = threadId + "@thread.skype"
+					}
+					messages, err := w.GetAllTextMessages(threadId, -1)
+					if err != nil {
+						fmt.Fprintln(c.App.Writer, "Fail to get message for thread:", threadId)
+						fmt.Fprintln(c.App.Writer, "Error:", err.Error())
+					} else {
+						fmt.Fprintln(c.App.Writer, "Found:", len(messages), "messages")
+					}
+					return nil
+				},
+			},
+			{
+				Name:    "clear-message",
+				Aliases: []string{"cm"},
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "thread",
+						Aliases:  []string{"t"},
+						Usage:    "coversation ID to remove",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					threadId := c.String("thread")
+					if !strings.HasPrefix(threadId, "19:") {
+						threadId = "19:" + threadId
+					}
+					if !strings.HasSuffix(threadId, "@thread.skype") {
+						threadId = threadId + "@thread.skype"
+					}
+					messages, err := w.GetAllTextMessages(threadId, -1)
+					if err != nil {
+						fmt.Fprintln(c.App.Writer, "Fail to get message for thread:", threadId)
+						fmt.Fprintln(c.App.Writer, "Error:", err.Error())
+					} else {
+						fmt.Fprintln(c.App.Writer, "Found:", len(messages), "messages")
+						deletedCount := 0
+						for _,msg := range messages {
+							if path.Base(msg.From) == "8:" + w.skypeId && msg.SkypeEditedId == "" {
+								if err := w.DeleteMessage(msg); err != nil {
+									fmt.Fprintln(c.App.Writer, "Fail to delete message:", msg.Id)
+								} else {
+									deletedCount ++
+								}
+							}
+						}
+						fmt.Fprintln(c.App.Writer, "Deleted:", deletedCount, "messages")
+					}
 					return nil
 				},
 			},
@@ -87,7 +160,7 @@ func (w *Worker) NsfwCommand(threadId string) *cli.Command {
 	})
 	for _, kw := range media.GetKeywords() {
 		x := kw
-		commands = append(commands,&cli.Command{
+		commands = append(commands, &cli.Command{
 			Name: x,
 			Action: func(c *cli.Context) error {
 				utils.ExecuteWithRetry(func() error {

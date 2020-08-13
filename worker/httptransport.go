@@ -43,7 +43,7 @@ func (w *Worker) executeHttpRequest(req *http.Request) (status int, headers http
 		if err := json.Unmarshal(body, &se); err == nil {
 			if se.ErrorCode == 752 {
 				newUrl := headers.Get("Location")
-				log.Println("Cloud location changed. Re-execute with new URL:", newUrl)
+				log.Println("Cloud location changed.", newUrl)
 				if parse, err := url.Parse(newUrl); err == nil {
 					w.baseUrl = parse.Scheme + "://" + parse.Host
 					return -1, nil, nil, ErrorCloudLocationChanged

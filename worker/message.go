@@ -8,7 +8,6 @@ import (
 	"github.com/ndphu/skypebot-go/utils"
 	"log"
 	"net/http"
-	"time"
 )
 
 func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize, width, height int) error {
@@ -43,7 +42,7 @@ func (w *Worker) PostImageToThread(target, objectId, fileName string, fileSize, 
 
 func (w *Worker) SendTextMessage(target, text string) (error) {
 	pmr := model.PostMessageRequest{
-		MessageId:   "1" + utils.RandStringRunes(19),
+		MessageId:   "1" + utils.RandStringRunes(16),
 		DisplayName: w.skypeId,
 		MessageType: "RichText",
 		ContentType: "text",
@@ -70,14 +69,14 @@ func (w *Worker) SendTextMessage(target, text string) (error) {
 	return nil
 }
 
-func (w *Worker) GetMessages(target string) ([]model.SkypeMessage, error) {
+func (w *Worker) GetMessages(threadId string) ([]model.SkypeMessage, error) {
 	threadMessages := make([]model.SkypeMessage, 0)
 
-	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages?startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
+	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+threadId+"/messages?startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
 	w.setRequestHeaders(req)
 	_, _, resp, err := w.executeHttpRequest(req)
 	if err != nil {
-		log.Println("Fail to query message in thread", target)
+		log.Println("Fail to query message in thread", threadId)
 		return nil, err
 	}
 	respObj := model.GetMessagesResponse{}
@@ -97,11 +96,19 @@ func (w *Worker) GetAllTextMessagesWithLimitAndTimeout(target string, limit int)
 	threadMessages := make([]model.SkypeMessage, 0)
 	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages?pageSize=200&startTime=1&view=supportsExtendedHistory|msnp24Equivalent|supportsMessageProperties", nil)
 	w.setRequestHeaders(req)
-	_, _, resp, err := w.executeHttpRequest(req)
-	if err != nil {
-		log.Println("Fail to query message in thread", target)
-		return nil, err
+	//_, _, resp, err := w.executeHttpRequest(req)
+	var resp []byte = nil
+	if err := utils.ExecuteWithRetry(func() error {
+		_, _, body, err := w.executeHttpRequest(req)
+		if err != nil {
+			return err
+		}
+		resp = body
+		return nil
+	}); err != nil {
+		return threadMessages, err
 	}
+
 	respObj := model.GetMessagesResponse{}
 	if err := json.Unmarshal(resp, &respObj); err != nil {
 		log.Println("Fail to unmarshal response", err)
@@ -111,41 +118,44 @@ func (w *Worker) GetAllTextMessagesWithLimitAndTimeout(target string, limit int)
 	for _, m := range respObj.Messages {
 		if m.Type == "Message" {
 			threadMessages = append(threadMessages, m)
-			if len(threadMessages) >= limit {
+			if limit > 0 && len(threadMessages) >= limit {
 				return threadMessages, nil
 			}
 		}
+	}
+
+	if len(respObj.Messages) < 200 {
+		return threadMessages, nil
 	}
 
 	syncState := respObj.MetaData.SyncState
 	loop := 0
 	for {
 		loop = loop + 1
-		log.Println("looping", loop, syncState)
 		_req2, _ := http.NewRequest("GET", syncState, nil)
 		w.setRequestHeaders(_req2)
-		_, _, resp2, err := w.executeHttpRequest(_req2)
-		if err != nil {
-			if err == utils.ErrorLimitRequestExceeded {
-				time.Sleep(15 * time.Second)
-				continue
-			} else {
-				log.Println("Fail to query message in thread", target)
-				return threadMessages, nil
+		var body []byte = nil
+		utils.ExecuteWithRetry(func() error {
+			_, _, b, err := w.executeHttpRequest(_req2)
+			if err != nil {
+				return err
 			}
-		}
-		if err := json.Unmarshal(resp2, &respObj); err != nil {
+			body = b
+			return nil
+		})
+
+		if err := json.Unmarshal(body, &respObj); err != nil {
 			log.Println("Fail to unmarshal response", err)
 			return nil, err
 		}
-		syncState = respObj.MetaData.SyncState
 		if len(respObj.Messages) == 0 {
 			return threadMessages, nil
 		}
+		syncState = respObj.MetaData.SyncState
 		for _, m := range respObj.Messages {
 			if m.Type == "Message" {
 				threadMessages = append(threadMessages, m)
-				if len(threadMessages) >= limit {
+				if limit > 0 && len(threadMessages) >= limit {
 					return threadMessages, nil
 				}
 			}
@@ -153,6 +163,93 @@ func (w *Worker) GetAllTextMessagesWithLimitAndTimeout(target string, limit int)
 	}
 
 	return threadMessages, nil
+}
+
+func (w *Worker) GetAllTextMessages(target string, limit int) ([]model.SkypeMessage, error) {
+	threadMessages := make([]model.SkypeMessage, 0)
+	req, _ := http.NewRequest("GET", w.baseUrl+"/v1/users/ME/conversations/"+target+"/messages", nil)
+	q := req.URL.Query()
+	q.Add("startTime", "2")
+	q.Add("pageSize", "200")
+	q.Add("view", "supportsExtendedHistory|msnp24Equivalent")
+	req.URL.RawQuery = q.Encode()
+	w.setRequestHeaders(req)
+	//_, _, resp, err := w.executeHttpRequest(req)
+	var resp []byte = nil
+	if err := utils.ExecuteWithRetry(func() error {
+		_, _, body, err := w.executeHttpRequest(req)
+		if err != nil {
+			return err
+		}
+		resp = body
+		return nil
+	}); err != nil {
+		return threadMessages, err
+	}
+
+	respObj := model.GetMessagesResponse{}
+	if err := json.Unmarshal(resp, &respObj); err != nil {
+		log.Println("Fail to unmarshal response", err)
+		return nil, err
+	}
+
+	for _, m := range respObj.Messages {
+		if m.Type == "Message" && m.MessageType == "RichText" && m.SkypeEditedId == "" && m.Content != "" {
+			threadMessages = append(threadMessages, m)
+			if limit > 0 && len(threadMessages) >= limit {
+				return threadMessages, nil
+			}
+		}
+	}
+
+	if len(respObj.Messages) < 200 {
+		return threadMessages, nil
+	}
+
+	syncState := respObj.MetaData.SyncState
+	loop := 0
+	for {
+		loop = loop + 1
+		_req2, _ := http.NewRequest("GET", syncState, nil)
+		w.setRequestHeaders(_req2)
+		var body []byte = nil
+		utils.ExecuteWithRetry(func() error {
+			_, _, b, err := w.executeHttpRequest(_req2)
+			if err != nil {
+				return err
+			}
+			body = b
+			return nil
+		})
+
+		if err := json.Unmarshal(body, &respObj); err != nil {
+			log.Println("Fail to unmarshal response", err)
+			return nil, err
+		}
+		if len(respObj.Messages) == 0 {
+			return threadMessages, nil
+		}
+		syncState = respObj.MetaData.SyncState
+		for _, m := range respObj.Messages {
+			if m.Type == "Message" && m.MessageType == "RichText" && m.SkypeEditedId == "" && m.Content != "" {
+				threadMessages = append(threadMessages, m)
+				if limit > 0 && len(threadMessages) >= limit {
+					return threadMessages, nil
+				}
+			}
+		}
+	}
+
+	return threadMessages, nil
+}
+
+func (w *Worker) DeleteMessage(sm model.SkypeMessage) error {
+	return utils.ExecuteWithRetry(func() error {
+		req, _ := http.NewRequest("DELETE", w.baseUrl+"/v1/users/ME/conversations/"+sm.ConversationId+"/messages/"+sm.Id, nil)
+		w.setRequestHeaders(req)
+		_, _, _, err := w.executeHttpRequest(req)
+		return err
+	})
 }
 
 func getURIObjectContent(objectId, filename string, fileSize, width, height int) string {

@@ -31,6 +31,7 @@ type SkypeMessage struct {
 	Type           string `json:"type"`
 	Version        string `json:"version"`
 	From           string `json:"from"`
+	SkypeEditedId  string `json:"skypeeditedid"`
 }
 
 type MetaData struct {
@@ -64,11 +65,11 @@ type MessageEvent struct {
 	Resource     MessageResource `json:"resource"`
 }
 
-func (e*MessageEvent) GetThreadId() string {
+func (e *MessageEvent) GetThreadId() string {
 	return path.Base(e.Resource.ConversationLink)
 }
 
-func (e*MessageEvent) GetFrom() string {
+func (e *MessageEvent) GetFrom() string {
 	return path.Base(e.Resource.From)
 }
 
@@ -91,6 +92,6 @@ type SubscriptionRequest struct {
 }
 
 type SkypeError struct {
-	ErrorCode int `json:"errorCode"`
-	Message string `json:"message"`
+	ErrorCode int    `json:"errorCode"`
+	Message   string `json:"message"`
 }

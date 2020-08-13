@@ -16,7 +16,7 @@ func (w *Worker) isMessageFromManager(event *model.MessageEvent) bool {
 }
 
 func normalizeMessageContent(content string) string {
-	commandString := strings.ReplaceAll(content, "-", "")
+	commandString := strings.TrimPrefix(content, "-")
 	commandString = strings.TrimSpace(commandString)
 	commandString = strings.ToLower(commandString)
 	log.Println("Normalized command:", commandString)

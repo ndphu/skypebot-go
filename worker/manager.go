@@ -74,6 +74,8 @@ func init() {
 			}
 		}
 	}
+
+	SaveWorkers()
 }
 
 func FindWorker(workerId string) (w *Worker) {
@@ -112,6 +114,11 @@ func SaveWorkers() error {
 		savedWorkers = append(savedWorkers, SavedWorker{
 			Id:         w.id,
 			SkypeToken: w.skypeToken,
+			Managers: w.managers,
+			NsfwEnabledThreads: w.nsfwEnabledThreads,
+			Username: w.username,
+			Password: w.password,
+			HealthCheckThread: w.healthCheckThread,
 		})
 	}
 	log.Println("Saving", len(savedWorkers), "to workers.json")
