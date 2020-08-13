@@ -21,7 +21,8 @@ func (w *Worker) GetConversations(limit int) ([]model.Conversation, error) {
 	}
 	responseObject := model.SkypeConversationResponse{}
 	if err := json.Unmarshal(respBody, &responseObject); err != nil {
-		log.Println("Fail to unmarshall data", string(respBody))
+		log.Println("Fail to unmarshal data", string(respBody))
+		log.Println("unmarshal error", err)
 		return nil, err
 	}
 	for _, co := range responseObject.Conversations {
