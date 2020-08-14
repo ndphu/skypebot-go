@@ -171,7 +171,7 @@ func (w *Worker) GetAllTextMessages(target string, limit int) ([]model.SkypeMess
 	q := req.URL.Query()
 	q.Add("startTime", "2")
 	q.Add("pageSize", "200")
-	q.Add("view", "supportsExtendedHistory|msnp24Equivalent")
+	q.Add("view", "msnp24Equivalent")
 	req.URL.RawQuery = q.Encode()
 	w.setRequestHeaders(req)
 	//_, _, resp, err := w.executeHttpRequest(req)

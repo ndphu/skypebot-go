@@ -1,4 +1,4 @@
-package worker
+package command
 
 import (
 	"bytes"
@@ -6,13 +6,14 @@ import (
 	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/model"
 	"github.com/ndphu/skypebot-go/utils"
+	"github.com/ndphu/skypebot-go/worker"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"path"
 	"strings"
 )
 
-func (w *Worker) ConversationCommand() *cli.Command {
+func ConversationCommand(w *worker.Worker) *cli.Command {
 	return &cli.Command{
 		Name:    "conversation",
 		Aliases: []string{"cv"},
@@ -25,22 +26,33 @@ func (w *Worker) ConversationCommand() *cli.Command {
 						Name:    "limit",
 						Aliases: []string{"l"},
 						Usage:   "limit return array",
-						Value:   10,
+						Value:   100,
 					},
 				},
 				Action: func(c *cli.Context) error {
 					limit := c.Int("limit")
-					conversations, err := w.GetConversations(limit)
-					if err != nil {
+					if limit > 200 {
+						limit = 200
+					}
+					conversations := make([]model.Conversation, 0)
+					if err := utils.ExecuteWithRetry(func() error {
+						if result, err := w.GetConversations(limit); err != nil {
+							return err
+						} else {
+							fmt.Fprintf(c.App.Writer, "Found %d conversations\n", len(result))
+							conversations = result
+							return nil
+						}
+					}); err != nil {
 						return err
 					}
 
 					table := tablewriter.NewWriter(c.App.Writer)
-					table.SetHeader([]string{"Name", "ID"})
+					table.SetHeader([]string{"ID", "Name", "Type"})
 					for _, conversation := range conversations {
 						shortId := strings.TrimPrefix(conversation.Id, "19:")
 						shortId = strings.TrimSuffix(shortId, "@thread.skype")
-						table.Append([]string{shortId, conversation.Topic})
+						table.Append([]string{shortId, conversation.Topic, conversation.Type})
 					}
 					table.Render()
 					return nil
@@ -102,8 +114,8 @@ func (w *Worker) ConversationCommand() *cli.Command {
 					} else {
 						fmt.Fprintln(c.App.Writer, "Found:", len(messages), "messages")
 						deletedCount := 0
-						for _,msg := range messages {
-							if path.Base(msg.From) == "8:" + w.skypeId && msg.SkypeEditedId == "" {
+						for _, msg := range messages {
+							if path.Base(msg.From) == "8:"+w.skypeId && msg.SkypeEditedId == "" {
 								if err := w.DeleteMessage(msg); err != nil {
 									fmt.Fprintln(c.App.Writer, "Fail to delete message:", msg.Id)
 								} else {
@@ -113,6 +125,25 @@ func (w *Worker) ConversationCommand() *cli.Command {
 						}
 						fmt.Fprintln(c.App.Writer, "Deleted:", deletedCount, "messages")
 					}
+					return nil
+				},
+			},
+			{
+				Name:  "leave",
+				Usage: "leave a conversation",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "thread",
+						Aliases:  []string{"t"},
+						Usage:    "coversation ID to list messages",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					if err := w.LeaveConversation(c.String("thread")); err != nil {
+						return err
+					}
+					fmt.Fprintln(c.App.Writer, "Left conversation successfully")
 					return nil
 				},
 			},
@@ -140,6 +171,37 @@ func (w *Worker) CovidCommand() *cli.Command {
 						table.Append([]string{conversation.Id, conversation.Topic})
 					}
 					table.Render()
+					return nil
+				},
+			},
+		},
+	}
+}
+
+func (w *Worker) BotCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "bot",
+		Usage: "configure the skype bot",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "set-healthcheck-thread",
+				Usage: "set healthcheck thread ID for posting health check message",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "thread",
+						Aliases:  []string{"t"},
+						Usage:    "health check thread ID",
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					thread := completeThreadId(c.String("thread"))
+					w.healthCheckThread = thread
+					if err := SaveWorkers(); err != nil {
+						return err
+					}
+					w.sendHealthCheckMessage(fmt.Sprintf("Worker %s use this thread to post healthcheck\n", w.id))
+					fmt.Fprintln(c.App.Writer, "Health check thread updated successfully")
 					return nil
 				},
 			},
@@ -186,6 +248,7 @@ func (w *Worker) NewAdminCLI(threadId string) *cli.App {
 		UsageText: "skype-bot admin cli",
 
 		Commands: []*cli.Command{
+			w.BotCommand(),
 			w.ConversationCommand(),
 			w.NsfwCommand(threadId),
 		},
@@ -212,8 +275,9 @@ func (w *Worker) HandleAdminCommand(event *model.MessageEvent) error {
 	adminCLI.ErrWriter = &buff
 	content := normalizeMessageContent("admin-cli " + event.Resource.Content)
 	if err := adminCLI.Run(strings.Split(content, " ")); err != nil {
-
-		return w.SendTextMessage(event.GetThreadId(), "<pre>"+buff.String()+"</pre>")
+		commandOutput := buff.String()
+		commandOutput = commandOutput + "Error:" + err.Error()
+		return w.SendTextMessage(event.GetThreadId(), "<pre>"+commandOutput+"</pre>")
 	}
 	return utils.ExecuteWithRetry(func() error {
 		if buff.Len() == 0 {
