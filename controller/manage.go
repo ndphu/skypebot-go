@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/skypebot-go/manager"
 	"github.com/ndphu/skypebot-go/media"
 	"github.com/ndphu/skypebot-go/worker"
 )
@@ -51,13 +52,13 @@ func Manage(r *gin.RouterGroup) {
 						"message": "Fail to create worker.",
 						"error":   err})
 				} else {
-					worker.AddWorker(newWorker)
+					manager.AddWorker(newWorker)
 					c.JSON(200, gin.H{"success": true, "worker": newWorker.Data()})
 				}
 			}
 		})
 		manage.POST("/saveWorkers", func(c *gin.Context) {
-			if err := worker.SaveWorkers(); err != nil {
+			if err := manager.SaveWorkers(); err != nil {
 				c.AbortWithStatusJSON(500, gin.H{"error": err.Error()})
 			} else {
 				c.JSON(200, gin.H{"success": true})

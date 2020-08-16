@@ -44,7 +44,7 @@ var nsfwHandler CommandHandler = func(w *Worker, command string, subCommand stri
 		}
 	}
 	for i := 0; i < count; i ++ {
-		go w.sendRandomImage(evt.GetThreadId(), keyword)
+		go w.SendRandomImage(evt.GetThreadId(), keyword)
 	}
 	return nil
 }
@@ -53,7 +53,7 @@ func standardizeSpaces(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-func (w *Worker) sendRandomImage(threadId, keyword string) error {
+func (w *Worker) SendRandomImage(threadId, keyword string) error {
 	if keyword == "" {
 		keyword = media.GetKeywords()[0]
 	}

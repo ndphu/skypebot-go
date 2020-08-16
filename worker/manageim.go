@@ -83,7 +83,7 @@ func (w *Worker) printManageHelp(evt *model.MessageEvent) error {
 }
 
 func parseManageCommand(input string) (command string, subCommand string, args []string) {
-	normalized := normalizeMessageContent(input)
+	normalized := utils.NormalizeMessageContent(input)
 	normalized = standardizeSpaces(normalized)
 	chunks := strings.Split(normalized, " ")
 	if len(chunks) > 0 {

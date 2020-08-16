@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
@@ -57,3 +58,12 @@ func CompleteUserId(id string) (string) {
 	}
 	return userId
 }
+
+func NormalizeMessageContent(content string) string {
+	commandString := strings.TrimPrefix(content, "-")
+	commandString = strings.TrimSpace(commandString)
+	commandString = strings.ToLower(commandString)
+	log.Println("Normalized command:", commandString)
+	return commandString
+}
+

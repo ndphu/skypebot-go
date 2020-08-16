@@ -2,8 +2,8 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/skypebot-go/manager"
 	"github.com/ndphu/skypebot-go/model"
-	"github.com/ndphu/skypebot-go/worker"
 	"log"
 )
 
@@ -11,7 +11,7 @@ func Messages(r * gin.RouterGroup)  {
 	messages := r.Group("/messages")
 	{
 		messages.POST("/textMessage", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
+			w := manager.FindWorker(c.GetHeader("workerId"))
 			if w == nil {
 				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 				return
@@ -29,7 +29,7 @@ func Messages(r * gin.RouterGroup)  {
 		})
 
 		messages.POST("/reactMessage", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
+			w := manager.FindWorker(c.GetHeader("workerId"))
 			if w == nil {
 				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 				return
@@ -47,7 +47,7 @@ func Messages(r * gin.RouterGroup)  {
 		})
 
 		messages.POST("/reactThread", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
+			w := manager.FindWorker(c.GetHeader("workerId"))
 			if w == nil {
 				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 				return
@@ -65,7 +65,7 @@ func Messages(r * gin.RouterGroup)  {
 		})
 
 		messages.GET("/thread/:threadId", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
+			w := manager.FindWorker(c.GetHeader("workerId"))
 			if w == nil {
 				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 				return

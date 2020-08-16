@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ndphu/skypebot-go/manager"
 	"github.com/ndphu/skypebot-go/model"
 	"github.com/ndphu/skypebot-go/worker"
 )
@@ -11,12 +12,12 @@ func WorkerController(r *gin.RouterGroup)  {
 	r.GET("/workers", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"success": true,
-			"workers": worker.GetWorkers(),
+			"workers": manager.GetWorkers(),
 		})
 	})
 
 	r.POST("/worker/:workerId/start", func(c *gin.Context) {
-		w := worker.FindWorker(c.Param("workerId"))
+		w := manager.FindWorker(c.Param("workerId"))
 		if w == nil {
 			c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 			return
@@ -31,7 +32,7 @@ func WorkerController(r *gin.RouterGroup)  {
 		c.JSON(200, gin.H{"success": true, "worker": w.Data()})
 	})
 	r.POST("/worker/:workerId/stop", func(c *gin.Context) {
-		w := worker.FindWorker(c.Param("workerId"))
+		w := manager.FindWorker(c.Param("workerId"))
 		if w == nil {
 			c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 			return
@@ -48,7 +49,7 @@ func WorkerController(r *gin.RouterGroup)  {
 
 
 	r.POST("/worker/:workerId/message/text", func(c *gin.Context) {
-		w := worker.FindWorker(c.Param("workerId"))
+		w := manager.FindWorker(c.Param("workerId"))
 		if w == nil {
 			c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 			return

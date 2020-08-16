@@ -19,7 +19,7 @@ func getDirectMessageHelp() string {
 	return mesg
 }
 
-func (w *Worker) processDirectIM(event *model.MessageEvent) {
+func (w *Worker) ProcessDirectIM(event *model.MessageEvent) {
 	command, subCommand, args := parseManageCommand(event.Resource.Content)
 	log.Println("Direct command:", command, subCommand, args)
 	if handler, exists := directMessageHandlers[command]; exists {

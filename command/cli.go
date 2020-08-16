@@ -115,7 +115,7 @@ func ConversationCommand(w *worker.Worker) *cli.Command {
 						fmt.Fprintln(c.App.Writer, "Found:", len(messages), "messages")
 						deletedCount := 0
 						for _, msg := range messages {
-							if path.Base(msg.From) == "8:"+w.skypeId && msg.SkypeEditedId == "" {
+							if path.Base(msg.From) == "8:"+w.SkypeId() && msg.SkypeEditedId == "" {
 								if err := w.DeleteMessage(msg); err != nil {
 									fmt.Fprintln(c.App.Writer, "Fail to delete message:", msg.Id)
 								} else {
@@ -151,7 +151,7 @@ func ConversationCommand(w *worker.Worker) *cli.Command {
 	}
 }
 
-func (w *Worker) CovidCommand() *cli.Command {
+func CovidCommand(w*worker.Worker) *cli.Command {
 	return &cli.Command{
 		Name: "covid19",
 		Subcommands: []*cli.Command{
@@ -178,7 +178,7 @@ func (w *Worker) CovidCommand() *cli.Command {
 	}
 }
 
-func (w *Worker) BotCommand() *cli.Command {
+func BotCommand(w *worker.Worker) *cli.Command {
 	return &cli.Command{
 		Name:  "bot",
 		Usage: "configure the skype bot",
@@ -195,12 +195,8 @@ func (w *Worker) BotCommand() *cli.Command {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					thread := completeThreadId(c.String("thread"))
-					w.healthCheckThread = thread
-					if err := SaveWorkers(); err != nil {
-						return err
-					}
-					w.sendHealthCheckMessage(fmt.Sprintf("Worker %s use this thread to post healthcheck\n", w.id))
+					thread := utils.CompleteThreadId(c.String("thread"))
+					w.SetHealthCheckThread(thread)
 					fmt.Fprintln(c.App.Writer, "Health check thread updated successfully")
 					return nil
 				},
@@ -209,7 +205,7 @@ func (w *Worker) BotCommand() *cli.Command {
 	}
 }
 
-func (w *Worker) NsfwCommand(threadId string) *cli.Command {
+func NsfwCommand(w *worker.Worker, threadId string) *cli.Command {
 	var commands []*cli.Command
 
 	commands = append(commands, &cli.Command{
@@ -226,7 +222,7 @@ func (w *Worker) NsfwCommand(threadId string) *cli.Command {
 			Name: x,
 			Action: func(c *cli.Context) error {
 				utils.ExecuteWithRetry(func() error {
-					return w.sendRandomImage(threadId, x)
+					return w.SendRandomImage(threadId, x)
 				})
 				return nil
 			},
@@ -242,15 +238,15 @@ func (w *Worker) NsfwCommand(threadId string) *cli.Command {
 	}
 }
 
-func (w *Worker) NewAdminCLI(threadId string) *cli.App {
+func NewAdminCLI(w * worker.Worker, threadId string) *cli.App {
 	return &cli.App{
 		Name:      "admin-cli",
 		UsageText: "skype-bot admin cli",
 
 		Commands: []*cli.Command{
-			w.BotCommand(),
-			w.ConversationCommand(),
-			w.NsfwCommand(threadId),
+			BotCommand(w),
+			ConversationCommand(w),
+			NsfwCommand(w, threadId),
 		},
 
 		ExitErrHandler: func(c *cli.Context, err error) {
@@ -259,7 +255,7 @@ func (w *Worker) NewAdminCLI(threadId string) *cli.App {
 			if c.Command.Name == "nsfw" {
 				//TODO hack
 				utils.ExecuteWithRetry(func() error {
-					return w.sendRandomImage(threadId, cmd)
+					return w.SendRandomImage(threadId, cmd)
 				})
 			} else {
 				fmt.Fprintf(c.App.Writer, "Command not found: [%s]. See help message for details.\n", cmd)
@@ -268,12 +264,12 @@ func (w *Worker) NewAdminCLI(threadId string) *cli.App {
 	}
 }
 
-func (w *Worker) HandleAdminCommand(event *model.MessageEvent) error {
-	adminCLI := w.NewAdminCLI(event.GetThreadId())
+func HandleAdminCommand(w *worker.Worker, event *model.MessageEvent) error {
+	adminCLI := NewAdminCLI(w, event.GetThreadId())
 	var buff bytes.Buffer
 	adminCLI.Writer = &buff
 	adminCLI.ErrWriter = &buff
-	content := normalizeMessageContent("admin-cli " + event.Resource.Content)
+	content := utils.NormalizeMessageContent("admin-cli " + event.Resource.Content)
 	if err := adminCLI.Run(strings.Split(content, " ")); err != nil {
 		commandOutput := buff.String()
 		commandOutput = commandOutput + "Error:" + err.Error()

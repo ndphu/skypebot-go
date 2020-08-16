@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
 	"github.com/ndphu/skypebot-go/model"
@@ -85,10 +86,8 @@ func NewWorker(skypeToken string, eventCallback EventCallback) (*Worker, error) 
 		stopRequest:       make(chan bool),
 		id:                uuid.New().String(),
 		status:            StatusStopped,
-		eventCallback: func(worker *Worker, event *model.MessageEvent) {
-			worker.ProcessMessage(event)
-		},
-		autoRestart: true,
+		eventCallback:     eventCallback,
+		autoRestart:       true,
 	}
 	if eventCallback != nil {
 		w.eventCallback = eventCallback
@@ -265,7 +264,7 @@ func (w *Worker) loadBaseUrl() (error) {
 	log.Println("Fail to init worker. Server response is unexpected:", resp.StatusCode, string(unknownResp))
 	logHeaders(resp.Header)
 	// TODO
-	w.baseUrl =  "https://client-s.gateway.messenger.live.com"
+	w.baseUrl = "https://client-s.gateway.messenger.live.com"
 	w.registrationToken = resp.Header.Get("Set-RegistrationToken")
 	log.Println("Message base url:", w.baseUrl)
 	log.Println("Loaded endpoint and registration token successfully")
@@ -400,4 +399,46 @@ func (w *Worker) ShouldRelogin() bool {
 		return nil, nil
 	})
 	return shouldRelogin
+}
+
+func (w *Worker) SkypeId() string {
+	return w.skypeId
+}
+func (w *Worker) SetHealthCheckThread(thread string) error {
+	w.healthCheckThread = thread
+	//if err := SaveWorkers(); err != nil {
+	//	return err
+	//}
+	w.sendHealthCheckMessage(fmt.Sprintf("Worker %s use this thread to post healthcheck\n", w.id))
+	return nil
+}
+func (w *Worker) SetId(id string) {
+	w.id = id
+}
+func (w *Worker) SetUsername(username string) {
+	w.username = username
+}
+func (w *Worker) SetPassword(password string) {
+	w.password = password
+}
+func (w *Worker) GetId() string {
+	return w.id
+}
+func (w *Worker) SetStatusCallback(callback func(worker *Worker)) {
+	w.statusCallback = callback
+}
+func (w *Worker) GetSkypeToken() string {
+	return w.skypeToken
+}
+func (w *Worker) GetUsername() string {
+	return w.username
+}
+func (w *Worker) GetPassword() string {
+	return w.password
+}
+func (w *Worker) GetHealthCheckThread() string {
+	return w.healthCheckThread
+}
+func (w*Worker) SetManagers(managers []string)  {
+	w.managers = managers
 }

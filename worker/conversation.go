@@ -51,8 +51,8 @@ func (w *Worker) GetConversations(limit int) ([]model.Conversation, error) {
 }
 
 func (w *Worker) LeaveConversation(threadId string) error {
-	threadId = completeThreadId(threadId)
-	botId := completeUserId(w.skypeId)
+	threadId = utils.CompleteThreadId(threadId)
+	botId := utils.CompleteUserId(w.skypeId)
 	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/v1/threads/%s/members/%s", w.baseUrl, threadId, botId), nil)
 	w.setRequestHeaders(req)
 

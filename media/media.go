@@ -15,10 +15,6 @@ import (
 
 var medias = make(map[string][]string)
 
-func init() {
-	ReloadMedias()
-}
-
 func loadFile(f string) []string {
 	log.Println("Loading resource:", f)
 	file, err := os.Open(f)

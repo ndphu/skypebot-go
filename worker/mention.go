@@ -17,7 +17,7 @@ func (w *Worker) getMentionPrefix() (string) {
 	return "<at id=\"8:" + w.skypeId + "\">"
 }
 
-func (w *Worker) isDirectMention(evt *model.MessageEvent) bool {
+func (w *Worker) IsDirectMention(evt *model.MessageEvent) bool {
 	return strings.HasPrefix(strings.TrimSpace(evt.Resource.Content), w.getMentionPrefix())
 }
 
@@ -29,7 +29,7 @@ func getMentionHelpMessage() string {
 	return mesg
 }
 
-func (w *Worker) processMention(event *model.MessageEvent) {
+func (w *Worker) ProcessMention(event *model.MessageEvent) {
 	mentionText := w.splitCommandInMention(event)
 	command, subCommand, args := parseManageCommand(mentionText)
 	log.Println("Mention command:", command, subCommand, args)

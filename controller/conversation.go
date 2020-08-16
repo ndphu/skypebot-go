@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ndphu/skypebot-go/worker"
+	"github.com/ndphu/skypebot-go/manager"
 	"log"
 	"strconv"
 )
@@ -11,7 +11,7 @@ func Conversations(r *gin.RouterGroup)  {
 	conversations := r.Group("/conversations")
 	{
 		conversations.GET("", func(c *gin.Context) {
-			w := worker.FindWorker(c.GetHeader("workerId"))
+			w := manager.FindWorker(c.GetHeader("workerId"))
 			if w == nil {
 				c.AbortWithStatusJSON(404, gin.H{"error": "worker not found"})
 				return
